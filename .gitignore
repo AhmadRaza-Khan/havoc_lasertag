@@ -1,0 +1,20 @@
+# Env files (secrets) — only examples and non-secret client build config are committed
+.env
+.env.*
+!.env.example
+!client/.env.development
+!client/.env.production
+
+# Rust
+server/target/
+
+# Node
+node_modules/
+client/dist/
+*.log
+
+# Editors / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
