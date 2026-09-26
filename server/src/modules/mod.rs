@@ -2,7 +2,10 @@
 //! and exposes a `routes()` function that is mounted here.
 
 pub mod auth;
+pub mod bookings;
+pub mod games;
 pub mod health;
+pub mod player_auth;
 pub mod players;
 pub mod users;
 
@@ -14,12 +17,21 @@ use crate::state::AppState;
 pub fn router(state: &AppState) -> Router<AppState> {
     let public = Router::new()
         .nest("/health", health::routes())
-        .nest("/auth", auth::routes());
+        .nest("/auth", auth::routes())
+        .nest("/player/auth", player_auth::routes());
 
-    // Admin-only feature routes: everything here requires a valid admin token.
+    // Admin panel (web): everything here requires an admin token.
     let admin = Router::new()
         .nest("/players", players::routes())
+        .nest("/games", games::routes())
+        .nest("/bookings", bookings::admin_routes())
         .route_layer(auth::require_auth(state));
 
-    public.merge(admin)
+    // Mobile app: everything here requires a player token.
+    let player = Router::new()
+        .nest("/player/games", games::routes())
+        .nest("/player/bookings", bookings::player_routes())
+        .route_layer(player_auth::require_player(state));
+
+    public.merge(admin).merge(player)
 }

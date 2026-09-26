@@ -1,0 +1,207 @@
+.game-cell {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Booking form: steps on the left, sticky summary on the right */
+
+.booking-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 20px;
+  align-items: start;
+}
+
+.booking-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.booking-step {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: visible;
+}
+
+.booking-step h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 1rem;
+}
+
+.step-number {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.picked {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.game-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.game-facts li {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--neutral-bg);
+  font-size: 0.85rem;
+}
+
+.people-input input {
+  width: 140px;
+}
+
+/* Slots */
+
+.slot-days {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.slot-day h4 {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 6px;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.slot:hover {
+  border-color: var(--accent);
+}
+
+.slot.selected {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.slot-time {
+  font-weight: 600;
+}
+
+.slot-seats {
+  font-size: 0.78rem;
+  opacity: 0.8;
+}
+
+.slot-wide {
+  flex-direction: row;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+}
+
+.current-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Summary */
+
+.booking-summary {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.booking-summary h2 {
+  font-size: 1.05rem;
+}
+
+.summary-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.booking-summary dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 12px;
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.booking-summary dt {
+  color: var(--muted);
+}
+
+.booking-summary dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 500;
+}
+
+.summary-note {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 0.85rem;
+}
+
+.summary-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+@media (max-width: 960px) {
+  .booking-form {
+    grid-template-columns: 1fr;
+  }
+
+  .booking-summary {
+    position: static;
+  }
+}

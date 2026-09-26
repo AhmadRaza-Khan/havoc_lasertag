@@ -1,10 +1,13 @@
-//! Players: admin CRUD over player accounts (players will later sign in from the mobile app).
+//! Players: admin CRUD over player accounts. Players sign in to the mobile app via
+//! `modules::player_auth`.
 
 mod dto;
 mod handlers;
-mod model;
-mod repository;
+pub mod model;
+pub mod repository;
 mod service;
+
+pub use model::Player;
 
 use axum::{Router, routing::get};
 

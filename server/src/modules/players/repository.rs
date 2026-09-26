@@ -95,3 +95,39 @@ pub async fn delete(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
         .await?;
     Ok(result.rows_affected() > 0)
 }
+
+/// Id and password hash for login. Playername must already be normalized.
+pub async fn find_credentials(
+    db: &PgPool,
+    playername: &str,
+) -> sqlx::Result<Option<(Uuid, String)>> {
+    sqlx::query_as("SELECT id, password_hash FROM players WHERE playername = $1")
+        .bind(playername)
+        .fetch_optional(db)
+        .await
+}
+
+pub async fn bookeo_customer_id(db: &PgPool, id: Uuid) -> sqlx::Result<Option<String>> {
+    sqlx::query_scalar("SELECT bookeo_customer_id FROM players WHERE id = $1")
+        .bind(id)
+        .fetch_optional(db)
+        .await
+        .map(Option::flatten)
+}
+
+/// Stores the Bookeo customer id unless another request already set one; returns the id in effect.
+pub async fn set_bookeo_customer_id(
+    db: &PgPool,
+    id: Uuid,
+    customer_id: &str,
+) -> sqlx::Result<String> {
+    sqlx::query_scalar(
+        "UPDATE players SET bookeo_customer_id = COALESCE(bookeo_customer_id, $2)
+         WHERE id = $1
+         RETURNING bookeo_customer_id",
+    )
+    .bind(id)
+    .bind(customer_id)
+    .fetch_one(db)
+    .await
+}

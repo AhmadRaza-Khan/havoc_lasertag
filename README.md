@@ -44,9 +44,11 @@ config.rs        env config
 db.rs            pool + migrations
 error.rs         AppError → JSON { "error": "..." } responses
 state.rs         AppState shared by handlers
-shared/          cross-module helpers: validation, password hashing, pagination
+shared/          cross-module helpers: validation, password hashing, JWT, pagination
+integrations/
+  bookeo/        typed Bookeo API client (products cache, slots, customers, bookings)
 modules/
-  mod.rs         mounts every module's routes under /api (public vs admin-only groups)
+  mod.rs         mounts every module's routes under /api (public / admin-only / player-only groups)
   <feature>/
     mod.rs       routes() + public exports
     dto.rs       request/response types + validation
@@ -56,9 +58,9 @@ modules/
 ```
 
 **Adding a feature:** create `modules/<feature>/` (see `modules/players/` as the reference),
-expose `pub fn routes() -> Router<AppState>`, and nest it in the `admin` group in `modules/mod.rs`
-— every route in that group requires an admin token. Handlers that need the caller take an
-`AuthUser` argument. Add schema changes as new files in `server/migrations/` (never edit an applied one).
+expose `pub fn routes() -> Router<AppState>`, and nest it in `modules/mod.rs`: in the `admin`
+group (admin token required; take an `AuthUser` argument for the caller) or the `player` group
+(player token required; take an `AuthPlayer` argument). Add schema changes as new files in `server/migrations/` (never edit an applied one).
 
 ### Client — `client/src/`
 
@@ -88,6 +90,11 @@ add its route inside the `AdminLayout` group in `app/router.tsx`, and add a side
 
 ## API
 
+Two kinds of token, never interchangeable: **admin** (web panel; httpOnly cookie or Bearer) and
+**player** (mobile app; Bearer only). Errors are always `{"error": "..."}`.
+
+### Admin
+
 | Method | Path | Auth | Notes |
 |---|---|---|---|
 | GET | `/api/health` | — | |
@@ -100,8 +107,34 @@ add its route inside the `AdminLayout` group in `app/router.tsx`, and add a side
 | GET | `/api/players/{id}` | admin | |
 | PUT | `/api/players/{id}` | admin | same body; blank/missing `password` keeps the current one |
 | DELETE | `/api/players/{id}` | admin | |
+| GET | `/api/games` | admin | same as the player games endpoint |
+| GET | `/api/games/{product_id}/slots?from=&to=` | admin | same as the player slots endpoint |
+| GET | `/api/bookings?search=&player_id=&when=upcoming\|past&status=&page=&per_page=` | admin | all bookings with their player; search matches player name, playername or booking number |
+| POST | `/api/bookings` | admin | `{player_id, product_id, event_id, num_people}` — books for any player |
+| GET | `/api/bookings/{id}` | admin | status refreshed from Bookeo |
+| PUT | `/api/bookings/{id}` | admin | `{event_id, num_people}` — move to another slot of the same game / change group size |
+| DELETE | `/api/bookings/{id}` | admin | cancels in Bookeo (seats freed); the booking stays listed as `canceled` |
+
+Admin booking changes are sent to Bookeo as staff actions (`mode=backend`) without notifying staff;
+player bookings notify staff. Customers get Bookeo's emails when they have an email address.
+
+### Player (mobile app)
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/api/player/auth/login` | `{playername, password}` → `{token, player}`; send `Authorization: Bearer <token>` afterwards |
+| GET | `/api/player/auth/me` | current player |
+| GET | `/api/player/games` | bookable games from Bookeo (cached 10 min): price, duration, group size, `requires_approval` |
+| GET | `/api/player/games/{product_id}/slots?from=YYYY-MM-DD&to=YYYY-MM-DD` | open slots with `event_id` and seats left. No dates = rest of today; `from` only = that day; max 31 days. Dates are in the business timezone |
+| POST | `/api/player/bookings` | `{product_id, event_id, num_people}` → booking (201). Bookeo rejections (slot full, …) → 422 |
+| GET | `/api/player/bookings?when=upcoming\|past&page=&per_page=` | the player's own bookings |
+| GET | `/api/player/bookings/{id}` | one booking, status refreshed from Bookeo |
+
+Booking `status` is `pending` (awaiting staff approval — all current games have it enabled),
+`confirmed` or `canceled`. Each player is mirrored as one Bookeo customer, created on their first booking.
 
 ## Production notes
 
-- `server/.env`: `COOKIE_SECURE=true`, `CORS_ORIGINS=https://<domain>`, `BIND_ADDR=127.0.0.1:8080` behind nginx.
+- `server/.env`: `COOKIE_SECURE=true`, `CORS_ORIGINS=https://<domain>`, `BIND_ADDR=127.0.0.1:8080` behind nginx,
+  plus `BOOKEO_API_KEY`, `BOOKEO_SECRET_KEY`, `BOOKEO_TIMEZONE` (see `server/.env.example`).
 - `client/.env.production`: `VITE_API_URL=https://api.<domain>`.

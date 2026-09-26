@@ -5,11 +5,13 @@ use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 
-/// Who a token was issued to. Keeps future player (mobile) tokens from passing admin checks.
+/// Who a token was issued to. Admin tokens (web panel) and player tokens (mobile app) are
+/// signed with the same secret, so every extractor must check the kind it expects.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TokenKind {
     Admin,
+    Player,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -2,6 +2,7 @@ pub mod app;
 pub mod config;
 pub mod db;
 pub mod error;
+pub mod integrations;
 pub mod modules;
 pub mod shared;
 pub mod state;
@@ -10,7 +11,7 @@ use std::sync::Arc;
 
 use tracing_subscriber::EnvFilter;
 
-use crate::{config::Config, state::AppState};
+use crate::{config::Config, integrations::bookeo::BookeoClient, state::AppState};
 
 pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
@@ -29,6 +30,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let bind_addr = config.bind_addr.clone();
     let state = AppState {
         db,
+        bookeo: Arc::new(BookeoClient::new(&config.bookeo)?),
         config: Arc::new(config),
     };
     let app = app::build(state)?;

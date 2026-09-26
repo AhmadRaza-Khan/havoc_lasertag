@@ -4,7 +4,8 @@
 !.env.example
 !client/.env.development
 !client/.env.production
-
+ab.php
+openapi.json
 # Rust
 server/target/
 

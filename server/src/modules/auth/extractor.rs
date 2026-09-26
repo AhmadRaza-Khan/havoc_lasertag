@@ -5,11 +5,12 @@ use axum::{
 use axum_extra::extract::CookieJar;
 use uuid::Uuid;
 
-use super::{
-    AUTH_COOKIE,
-    jwt::{self, TokenKind},
+use super::AUTH_COOKIE;
+use crate::{
+    error::AppError,
+    shared::jwt::{self, TokenKind},
+    state::AppState,
 };
-use crate::{error::AppError, state::AppState};
 
 /// Authenticated admin user extracted from the request. Add it as a handler argument to get the
 /// caller, or protect a whole router group with [`super::require_auth`].

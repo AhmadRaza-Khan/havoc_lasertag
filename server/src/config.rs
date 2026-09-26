@@ -1,5 +1,7 @@
 use std::env;
 
+use chrono_tz::Tz;
+
 #[derive(Clone, Debug)]
 pub struct Config {
     pub database_url: String,
@@ -8,6 +10,16 @@ pub struct Config {
     pub jwt_ttl_hours: i64,
     pub cors_origins: Vec<String>,
     pub cookie_secure: bool,
+    pub bookeo: BookeoConfig,
+}
+
+#[derive(Clone, Debug)]
+pub struct BookeoConfig {
+    pub api_key: String,
+    pub secret_key: String,
+    pub base_url: String,
+    /// The business's local timezone: "today" and date ranges are evaluated in it.
+    pub timezone: Tz,
 }
 
 impl Config {
@@ -35,6 +47,18 @@ impl Config {
             cookie_secure: env::var("COOKIE_SECURE")
                 .map(|v| v == "true" || v == "1")
                 .unwrap_or(true),
+            bookeo: BookeoConfig {
+                api_key: required("BOOKEO_API_KEY")?,
+                secret_key: required("BOOKEO_SECRET_KEY")?,
+                base_url: env::var("BOOKEO_BASE_URL")
+                    .unwrap_or_else(|_| "https://api.bookeo.com/v2".into())
+                    .trim_end_matches('/')
+                    .to_string(),
+                timezone: env::var("BOOKEO_TIMEZONE")
+                    .unwrap_or_else(|_| "Asia/Qatar".into())
+                    .parse()
+                    .map_err(|_| "BOOKEO_TIMEZONE must be an IANA timezone, e.g. Asia/Qatar")?,
+            },
         })
     }
 }

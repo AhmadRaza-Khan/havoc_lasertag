@@ -19,6 +19,12 @@ pub enum AppError {
     NotFound(String),
     #[error("{0}")]
     Conflict(String),
+    /// The request was valid but an upstream system (e.g. Bookeo) rejected it.
+    #[error("{0}")]
+    Unprocessable(String),
+    /// An upstream system failed or is unreachable. The message is logged, not returned.
+    #[error("{0}")]
+    BadGateway(String),
     #[error(transparent)]
     Database(#[from] sqlx::Error),
     #[error("{0}")]
@@ -33,6 +39,14 @@ impl IntoResponse for AppError {
             AppError::Forbidden(m) => (StatusCode::FORBIDDEN, m.clone()),
             AppError::NotFound(m) => (StatusCode::NOT_FOUND, m.clone()),
             AppError::Conflict(m) => (StatusCode::CONFLICT, m.clone()),
+            AppError::Unprocessable(m) => (StatusCode::UNPROCESSABLE_ENTITY, m.clone()),
+            AppError::BadGateway(e) => {
+                tracing::error!("upstream error: {e}");
+                (
+                    StatusCode::BAD_GATEWAY,
+                    "Booking service is unavailable, please try again".into(),
+                )
+            }
             AppError::Database(e) => {
                 tracing::error!("database error: {e}");
                 (

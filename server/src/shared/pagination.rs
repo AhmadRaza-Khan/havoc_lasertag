@@ -43,6 +43,16 @@ impl<T> Paginated<T> {
             per_page: params.per_page(),
         }
     }
+
+    /// Converts the items, keeping the paging info.
+    pub fn map<U>(self, f: impl FnMut(T) -> U) -> Paginated<U> {
+        Paginated {
+            items: self.items.into_iter().map(f).collect(),
+            total: self.total,
+            page: self.page,
+            per_page: self.per_page,
+        }
+    }
 }
 
 /// Escapes `%`, `_` and `\` so user input is matched literally inside an ILIKE pattern.

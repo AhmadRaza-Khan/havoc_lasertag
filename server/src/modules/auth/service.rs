@@ -1,14 +1,15 @@
 use sqlx::PgPool;
 
-use super::{
-    dto::{LoginRequest, SignupRequest},
-    jwt::{self, TokenKind},
-};
+use super::dto::{LoginRequest, SignupRequest};
 use crate::{
     config::Config,
     error::{AppError, AppResult},
     modules::users::{User, repository as users},
-    shared::{password, validation::normalize_handle},
+    shared::{
+        jwt::{self, TokenKind},
+        password,
+        validation::normalize_handle,
+    },
 };
 
 pub async fn signup(db: &PgPool, req: SignupRequest) -> AppResult<User> {

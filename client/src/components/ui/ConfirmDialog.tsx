@@ -6,6 +6,7 @@ type ConfirmDialogProps = {
   title: string
   message: ReactNode
   confirmLabel?: string
+  cancelLabel?: string
   pending?: boolean
   error?: string | null
   onConfirm: () => void
@@ -17,6 +18,7 @@ export function ConfirmDialog({
   title,
   message,
   confirmLabel = 'Delete',
+  cancelLabel = 'Cancel',
   pending = false,
   error,
   onConfirm,
@@ -30,7 +32,7 @@ export function ConfirmDialog({
       footer={
         <>
           <button type="button" className="btn btn-secondary" onClick={onClose} disabled={pending}>
-            Cancel
+            {cancelLabel}
           </button>
           <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={pending}>
             {pending ? 'Working…' : confirmLabel}

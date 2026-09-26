@@ -3,7 +3,6 @@
 mod dto;
 mod extractor;
 mod handlers;
-mod jwt;
 mod service;
 
 use axum::{
