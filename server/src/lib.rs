@@ -31,6 +31,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState {
         db,
         bookeo: Arc::new(BookeoClient::new(&config.bookeo)?),
+        chat: Arc::new(Default::default()),
         config: Arc::new(config),
     };
     let app = app::build(state)?;

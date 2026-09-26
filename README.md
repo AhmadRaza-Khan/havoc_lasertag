@@ -130,6 +130,36 @@ player bookings notify staff. Customers get Bookeo's emails when they have an em
 | GET | `/api/player/bookings?when=upcoming\|past&page=&per_page=` | the player's own bookings |
 | GET | `/api/player/bookings/{id}` | one booking, status refreshed from Bookeo |
 
+### Chat (mobile app, player token)
+
+Private one-to-one chat between any two players. Messages persist in Postgres; delivery,
+typing, read receipts and online status are real-time over one WebSocket per app session.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/player/chats/players?search=&page=&per_page=` | every other player: `id, full_name, playername, online, last_seen_at` (no contact details) |
+| GET | `/api/player/chats/players/{id}` | one player with presence |
+| GET | `/api/player/chats/conversations` | my conversations, most recent first, with `last_message` and `unread_count` |
+| GET | `/api/player/chats/conversations/{player_id}/messages?before=&limit=` | history with that player, newest first; `before` = oldest message id you have; `has_more` |
+| POST | `/api/player/chats/conversations/{player_id}/messages` | `{body}` (1–2000 chars) — fallback when the socket is down; still pushed live |
+| POST | `/api/player/chats/conversations/{player_id}/read` | mark their messages read (sends them a read receipt) |
+| GET (WS) | `/api/player/chats/ws` | auth: `Authorization: Bearer <token>` header, or `?token=` for clients that can't set headers |
+
+WebSocket frames are JSON with a `type`:
+
+- **App → server:** `{"type":"send","to":<player_id>,"body":"…","client_id":"…"}`,
+  `{"type":"typing","to":<player_id>,"is_typing":true}`, `{"type":"read","with":<player_id>}`, `{"type":"ping"}`
+- **Server → app:** `ready {player_id, online_player_ids}` (on connect), `message {message, client_id?}`
+  (to both sides; `client_id` only on the sender's copy), `typing {from, is_typing}`,
+  `read {by, read_at}`, `presence {player_id, online, last_seen_at}` (to everyone), `pong`,
+  `error {message, client_id?}`
+
+App guidance: reconnect with backoff when the socket drops, then refetch conversations; treat
+`typing` as stopped if not refreshed within ~6 s (re-send `true` every ~3 s while typing). The
+server pings every 25 s and drops connections silent for 70 s, so presence stays accurate when
+phones lose signal. Presence is tracked in memory — fine for one server process; several
+instances would need a shared bus (e.g. Postgres LISTEN/NOTIFY).
+
 Booking `status` is `pending` (awaiting staff approval — all current games have it enabled),
 `confirmed` or `canceled`. Each player is mirrored as one Bookeo customer, created on their first booking.
 
@@ -138,3 +168,6 @@ Booking `status` is `pending` (awaiting staff approval — all current games hav
 - `server/.env`: `COOKIE_SECURE=true`, `CORS_ORIGINS=https://<domain>`, `BIND_ADDR=127.0.0.1:8080` behind nginx,
   plus `BOOKEO_API_KEY`, `BOOKEO_SECRET_KEY`, `BOOKEO_TIMEZONE` (see `server/.env.example`).
 - `client/.env.production`: `VITE_API_URL=https://api.<domain>`.
+- nginx must pass WebSocket upgrades for `/api/player/chats/ws`
+  (`proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";`
+  and `proxy_read_timeout` above 70 s).

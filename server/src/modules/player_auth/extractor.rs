@@ -30,10 +30,18 @@ impl FromRequestParts<AppState> for AuthPlayer {
             .and_then(|v| v.strip_prefix("Bearer "))
             .ok_or_else(|| AppError::Unauthorized("Not authenticated".into()))?;
 
-        let claims = jwt::verify_token(token, &state.config.jwt_secret)?;
-        if claims.kind != TokenKind::Player {
-            return Err(AppError::Forbidden("Player access required".into()));
-        }
-        Ok(AuthPlayer { id: claims.sub })
+        Ok(AuthPlayer {
+            id: player_id_from_token(token, state)?,
+        })
     }
+}
+
+/// Validates a player token and returns the player id. Also used by the chat WebSocket,
+/// which may receive the token as a query parameter.
+pub fn player_id_from_token(token: &str, state: &AppState) -> Result<Uuid, AppError> {
+    let claims = jwt::verify_token(token, &state.config.jwt_secret)?;
+    if claims.kind != TokenKind::Player {
+        return Err(AppError::Forbidden("Player access required".into()));
+    }
+    Ok(claims.sub)
 }

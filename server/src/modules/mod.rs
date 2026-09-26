@@ -3,6 +3,7 @@
 
 pub mod auth;
 pub mod bookings;
+pub mod chats;
 pub mod games;
 pub mod health;
 pub mod player_auth;
@@ -18,7 +19,9 @@ pub fn router(state: &AppState) -> Router<AppState> {
     let public = Router::new()
         .nest("/health", health::routes())
         .nest("/auth", auth::routes())
-        .nest("/player/auth", player_auth::routes());
+        .nest("/player/auth", player_auth::routes())
+        // Authenticates itself: WebSocket clients may pass the token as a query parameter.
+        .nest("/player/chats", chats::ws_routes());
 
     // Admin panel (web): everything here requires an admin token.
     let admin = Router::new()
@@ -31,6 +34,7 @@ pub fn router(state: &AppState) -> Router<AppState> {
     let player = Router::new()
         .nest("/player/games", games::routes())
         .nest("/player/bookings", bookings::player_routes())
+        .nest("/player/chats", chats::routes())
         .route_layer(player_auth::require_player(state));
 
     public.merge(admin).merge(player)

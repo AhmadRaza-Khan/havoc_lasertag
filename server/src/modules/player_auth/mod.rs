@@ -10,7 +10,7 @@ use axum::{
     routing::{get, post},
 };
 
-pub use extractor::AuthPlayer;
+pub use extractor::{AuthPlayer, player_id_from_token};
 
 use crate::state::AppState;
 
