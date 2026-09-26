@@ -1,0 +1,97 @@
+use sqlx::PgPool;
+use uuid::Uuid;
+
+use super::{dto::ValidPlayer, model::Player};
+
+/// Lists players, newest first. `pattern` is an escaped ILIKE pattern (see `like_pattern`).
+pub async fn list(
+    db: &PgPool,
+    pattern: Option<&str>,
+    limit: i64,
+    offset: i64,
+) -> sqlx::Result<(Vec<Player>, i64)> {
+    let items = sqlx::query_as(
+        "SELECT id, full_name, playername, phone, email, created_at, updated_at
+         FROM players
+         WHERE $1::text IS NULL OR playername ILIKE $1 OR full_name ILIKE $1
+         ORDER BY created_at DESC
+         LIMIT $2 OFFSET $3",
+    )
+    .bind(pattern)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(db)
+    .await?;
+
+    let total = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM players
+         WHERE $1::text IS NULL OR playername ILIKE $1 OR full_name ILIKE $1",
+    )
+    .bind(pattern)
+    .fetch_one(db)
+    .await?;
+
+    Ok((items, total))
+}
+
+pub async fn find_by_id(db: &PgPool, id: Uuid) -> sqlx::Result<Option<Player>> {
+    sqlx::query_as(
+        "SELECT id, full_name, playername, phone, email, created_at, updated_at
+         FROM players WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn create(db: &PgPool, p: &ValidPlayer, password_hash: &str) -> sqlx::Result<Player> {
+    sqlx::query_as(
+        "INSERT INTO players (full_name, playername, phone, email, password_hash)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, full_name, playername, phone, email, created_at, updated_at",
+    )
+    .bind(&p.full_name)
+    .bind(&p.playername)
+    .bind(&p.phone)
+    .bind(&p.email)
+    .bind(password_hash)
+    .fetch_one(db)
+    .await
+}
+
+/// Updates a player. A `None` password hash keeps the existing password.
+pub async fn update(
+    db: &PgPool,
+    id: Uuid,
+    p: &ValidPlayer,
+    password_hash: Option<&str>,
+) -> sqlx::Result<Option<Player>> {
+    sqlx::query_as(
+        "UPDATE players SET
+             full_name = $2,
+             playername = $3,
+             phone = $4,
+             email = $5,
+             password_hash = COALESCE($6, password_hash),
+             updated_at = now()
+         WHERE id = $1
+         RETURNING id, full_name, playername, phone, email, created_at, updated_at",
+    )
+    .bind(id)
+    .bind(&p.full_name)
+    .bind(&p.playername)
+    .bind(&p.phone)
+    .bind(&p.email)
+    .bind(password_hash)
+    .fetch_optional(db)
+    .await
+}
+
+/// Returns `true` if a row was deleted.
+pub async fn delete(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    let result = sqlx::query("DELETE FROM players WHERE id = $1")
+        .bind(id)
+        .execute(db)
+        .await?;
+    Ok(result.rows_affected() > 0)
+}
