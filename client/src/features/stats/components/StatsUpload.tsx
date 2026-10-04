@@ -44,11 +44,7 @@ export function StatsUpload() {
     <section className="panel panel-padded stats-upload">
       <div className="stats-upload-head">
         <div>
-          <h2>Upload game report</h2>
-          <p className="muted small">
-            The arena&apos;s statistics PDF. Each player&apos;s stats are added to their record;
-            the file is deleted once it has been read.
-          </p>
+          <h2>Upload game stats report</h2>
         </div>
       </div>
 
