@@ -1,0 +1,51 @@
+name: Set up SSH to the VPS
+description: >
+  Writes the deploy key, pins the VPS host key and defines the `vps` SSH host alias,
+  so later steps can run `ssh vps ...`.
+
+inputs:
+  host:
+    description: VPS hostname or IP
+    required: true
+  user:
+    description: SSH user on the VPS
+    required: true
+  port:
+    description: SSH port
+    required: false
+    default: "22"
+  private-key:
+    description: Private key (OpenSSH format) whose public key is in the user's authorized_keys
+    required: true
+  known-hosts:
+    description: Output of `ssh-keyscan -p <port> <host>`, to verify the VPS host key
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        HOST: ${{ inputs.host }}
+        USER_NAME: ${{ inputs.user }}
+        PORT: ${{ inputs.port }}
+        PRIVATE_KEY: ${{ inputs.private-key }}
+        KNOWN_HOSTS: ${{ inputs.known-hosts }}
+      run: |
+        set -euo pipefail
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        printf '%s\n' "$PRIVATE_KEY" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+        cat > ~/.ssh/config <<EOF
+        Host vps
+          HostName $HOST
+          User $USER_NAME
+          Port ${PORT:-22}
+          IdentityFile ~/.ssh/deploy_key
+          IdentitiesOnly yes
+          StrictHostKeyChecking yes
+          ServerAliveInterval 30
+        EOF
+        ssh vps 'echo "connected to $(hostname)"'

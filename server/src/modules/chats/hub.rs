@@ -64,6 +64,16 @@ impl ChatHub {
         }
     }
 
+    /// Drops every connection of `player` (their sockets close). Returns true if they were
+    /// online. Used when the account is deleted or its password is reset.
+    pub fn disconnect(&self, player: Uuid) -> bool {
+        self.connections
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&player)
+            .is_some()
+    }
+
     pub fn is_online(&self, player: Uuid) -> bool {
         self.read().contains_key(&player)
     }
@@ -137,6 +147,20 @@ mod tests {
         assert!(!hub.unregister(p, a.id), "still online on the other device");
         assert!(hub.unregister(p, b.id), "last device gone");
         assert!(!hub.is_online(p));
+    }
+
+    #[tokio::test]
+    async fn disconnect_closes_all_devices() {
+        let hub = ChatHub::default();
+        let p = Uuid::from_u128(1);
+        let mut a = hub.register(p);
+        let mut b = hub.register(p);
+        assert!(hub.disconnect(p));
+        assert!(!hub.is_online(p));
+        // Senders dropped → the socket writers see the channel close and shut the sockets.
+        assert!(a.rx.recv().await.is_none());
+        assert!(b.rx.recv().await.is_none());
+        assert!(!hub.unregister(p, a.id), "late unregister is harmless");
     }
 
     #[tokio::test]

@@ -137,3 +137,19 @@ pub fn typing(state: &AppState, from: Uuid, to: Uuid, is_typing: bool) {
             .send(to, &ServerEvent::Typing { from, is_typing });
     }
 }
+
+/// Closes the player's open chat sockets and tells everyone they're offline. Call when the
+/// account is deleted or its password is reset, so old sessions lose live access at once.
+pub fn disconnect_player(state: &AppState, player_id: Uuid) {
+    if state.chat.disconnect(player_id) {
+        state.chat.broadcast_except(
+            player_id,
+            &ServerEvent::Presence {
+                player_id,
+                online: false,
+                last_seen_at: Some(chrono::Utc::now()),
+            },
+        );
+        tracing::info!(%player_id, "chat sockets closed (account changed)");
+    }
+}

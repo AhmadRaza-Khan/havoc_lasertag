@@ -1,10 +1,13 @@
 use axum::{
     Router,
+    extract::{Request, State},
     http::{HeaderValue, Method, header},
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
 };
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::{cors::CorsLayer, set_header::SetResponseHeaderLayer, trace::TraceLayer};
 
-use crate::{config::Config, modules, state::AppState};
+use crate::{config::Config, error::AppError, modules, state::AppState};
 
 /// Builds the full HTTP application: all module routers under `/api` plus global middleware.
 pub fn build(state: AppState) -> Result<Router, Box<dyn std::error::Error>> {
@@ -12,9 +15,48 @@ pub fn build(state: AppState) -> Result<Router, Box<dyn std::error::Error>> {
 
     Ok(Router::new()
         .nest("/api", modules::router(&state))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            reject_foreign_origins,
+        ))
         .layer(cors)
-        .layer(TraceLayer::new_for_http())
+        // API responses carry personal data: never store them in browser/proxy caches.
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("no-store"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::X_CONTENT_TYPE_OPTIONS,
+            HeaderValue::from_static("nosniff"),
+        ))
+        .layer(
+            // Log the path only: the chat WebSocket may carry its token in the query string.
+            TraceLayer::new_for_http().make_span_with(|req: &Request| {
+                tracing::debug_span!("request", method = %req.method(), path = %req.uri().path())
+            }),
+        )
         .with_state(state))
+}
+
+/// CSRF protection for cookie-authenticated requests: browsers always send `Origin` on
+/// cross-site POST/PUT/PATCH/DELETE, so a write from a page on another site is refused even
+/// if the browser would attach the admin cookie. Requests without `Origin` (the mobile app,
+/// curl) are unaffected — they authenticate with Bearer tokens, which other sites can't read.
+async fn reject_foreign_origins(
+    State(state): State<AppState>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let unsafe_method = !matches!(*req.method(), Method::GET | Method::HEAD | Method::OPTIONS);
+    if unsafe_method && let Some(origin) = req.headers().get(header::ORIGIN) {
+        let allowed = origin
+            .to_str()
+            .is_ok_and(|o| state.config.cors_origins.iter().any(|a| a == o));
+        if !allowed {
+            return AppError::Forbidden("Cross-origin request blocked".into()).into_response();
+        }
+    }
+    next.run(req).await
 }
 
 fn cors_layer(config: &Config) -> Result<CorsLayer, Box<dyn std::error::Error>> {

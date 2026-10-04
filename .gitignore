@@ -6,6 +6,8 @@
 !client/.env.production
 ab.php
 openapi.json
+# Game statistics reports contain real player data; they're uploaded, never committed
+Total_statistic*.pdf
 # Rust
 server/target/
 

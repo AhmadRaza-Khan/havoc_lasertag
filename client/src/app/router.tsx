@@ -3,6 +3,7 @@ import { AdminLayout } from '@/components/layout/AdminLayout'
 import { GuestRoute, LoginPage, ProtectedRoute } from '@/features/auth'
 import { BookingFormPage, BookingsPage } from '@/features/bookings'
 import { DashboardPage } from '@/features/dashboard'
+import { OffersPage } from '@/features/offers'
 import { PlayersPage } from '@/features/players'
 
 export function AppRoutes() {
@@ -20,6 +21,7 @@ export function AppRoutes() {
           <Route path="/bookings" element={<BookingsPage />} />
           <Route path="/bookings/new" element={<BookingFormPage />} />
           <Route path="/bookings/:id/edit" element={<BookingFormPage />} />
+          <Route path="/offers" element={<OffersPage />} />
         </Route>
       </Route>
 

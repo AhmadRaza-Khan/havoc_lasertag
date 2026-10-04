@@ -1,4 +1,8 @@
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{
+    Json,
+    extract::State,
+    http::{HeaderMap, StatusCode},
+};
 use axum_extra::extract::{
     CookieJar,
     cookie::{Cookie, SameSite},
@@ -9,22 +13,42 @@ use super::{
     dto::{LoginRequest, LoginResponse, SignupRequest},
     service,
 };
-use crate::{error::AppResult, modules::users::PublicUser, state::AppState};
+use crate::{
+    error::{AppError, AppResult},
+    modules::users::PublicUser,
+    shared::{login_throttle::Attempt, validation::normalize_handle},
+    state::AppState,
+};
 
 pub async fn signup(
     State(state): State<AppState>,
+    caller: Result<AuthUser, AppError>,
     Json(req): Json<SignupRequest>,
 ) -> AppResult<(StatusCode, Json<PublicUser>)> {
-    let user = service::signup(&state.db, req).await?;
+    let user = service::signup(&state.db, req, caller.is_ok()).await?;
     Ok((StatusCode::CREATED, Json(user.into())))
 }
 
 pub async fn login(
     State(state): State<AppState>,
+    headers: HeaderMap,
     jar: CookieJar,
     Json(req): Json<LoginRequest>,
 ) -> AppResult<(CookieJar, Json<LoginResponse>)> {
-    let (user, token) = service::login(&state.db, &state.config, req).await?;
+    let attempt = Attempt::new("admin", &normalize_handle(&req.username), &headers);
+    state.login_throttle.check(&attempt)?;
+    let (user, token) = match service::login(&state.db, &state.config, req).await {
+        Ok(ok) => {
+            state.login_throttle.record_success(&attempt);
+            ok
+        }
+        Err(e) => {
+            if matches!(e, AppError::Unauthorized(_)) {
+                state.login_throttle.record_failure(&attempt);
+            }
+            return Err(e);
+        }
+    };
 
     let mut cookie = auth_cookie(&state, token.clone());
     cookie.set_max_age(time::Duration::hours(state.config.jwt_ttl_hours));

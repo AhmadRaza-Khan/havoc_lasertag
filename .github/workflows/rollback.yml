@@ -1,0 +1,57 @@
+name: Rollback
+
+# Re-activates a release that is still on the VPS (the last 5 are kept). No build, no upload.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Release to activate, e.g. 20260926101500-abc1234. "previous" = the one before the live release. "list" = just show releases.'
+        required: true
+        default: previous
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    name: Activate release
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.WEB_URL || 'https://example.com' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            deploy/scripts
+            .github/actions
+
+      - name: Validate input
+        env:
+          RELEASE: ${{ inputs.release }}
+        run: |
+          [[ "$RELEASE" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::invalid release name"; exit 1; }
+
+      - uses: ./.github/actions/setup-ssh
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          user: ${{ secrets.VPS_USER }}
+          port: ${{ secrets.VPS_PORT || '22' }}
+          private-key: ${{ secrets.VPS_SSH_KEY }}
+          known-hosts: ${{ secrets.VPS_KNOWN_HOSTS }}
+
+      - name: Activate
+        env:
+          RELEASE: ${{ inputs.release }}
+          API_ROOT: ${{ vars.API_ROOT || '/opt/havoc' }}
+          WEB_ROOT: ${{ vars.WEB_ROOT || '/var/www/havoc' }}
+          HEALTH_URL: ${{ vars.HEALTH_URL || 'http://127.0.0.1:8080/api/health' }}
+        run: |
+          if [ "$RELEASE" = list ]; then cmd=list; else cmd=activate; fi
+          ssh vps "API_ROOT='$API_ROOT' WEB_ROOT='$WEB_ROOT' HEALTH_URL='$HEALTH_URL' bash -s -- $cmd '$RELEASE'" \
+            < deploy/scripts/activate.sh

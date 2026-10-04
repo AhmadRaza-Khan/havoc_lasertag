@@ -37,6 +37,15 @@ export function BookingsTable({ bookings, onCancel }: BookingsTableProps) {
                   <div className="stack-cell">
                     <span className="strong">{b.player.full_name}</span>
                     <span className="muted">@{b.player.playername}</span>
+                    {b.other_players.length > 0 && (
+                      <span
+                        className="muted small"
+                        title={b.other_players.map((o) => o.full_name).join(', ')}
+                      >
+                        + {b.other_players.length} other player
+                        {b.other_players.length === 1 ? '' : 's'}
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td className="game-cell" title={b.game_name}>

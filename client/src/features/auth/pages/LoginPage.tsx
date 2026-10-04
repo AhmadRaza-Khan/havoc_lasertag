@@ -26,8 +26,12 @@ export default function LoginPage() {
   return (
     <div className="center">
       <form className="card" onSubmit={handleSubmit}>
+        {/* The logo's tagline is white, so it sits on a dark band in both themes */}
+        <div className="login-brand">
+          <img src="/logo.png" alt="Havoc Tactical Laser Tag" />
+        </div>
         <div>
-          <h1>Havoc Admin</h1>
+          <h1 className="login-title">Admin sign in</h1>
           <p className="muted">Sign in to continue.</p>
         </div>
 

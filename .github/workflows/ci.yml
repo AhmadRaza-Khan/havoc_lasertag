@@ -1,9 +1,11 @@
 name: CI
 
+# Pushes to main run CI as the first stage of deploy.yml instead.
 on:
   push:
-    branches: [main]
+    branches-ignore: [main]
   pull_request:
+  workflow_call:
 
 jobs:
   server:

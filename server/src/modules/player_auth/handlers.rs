@@ -1,4 +1,4 @@
-use axum::{Json, extract::State};
+use axum::{Json, extract::State, http::HeaderMap};
 use serde::{Deserialize, Serialize};
 
 use super::AuthPlayer;
@@ -7,6 +7,7 @@ use crate::{
     modules::players::{Player, repository as players},
     shared::{
         jwt::{self, TokenKind},
+        login_throttle::Attempt,
         password,
         validation::normalize_handle,
     },
@@ -27,17 +28,23 @@ pub struct LoginResponse {
 
 pub async fn login(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(req): Json<LoginRequest>,
 ) -> AppResult<Json<LoginResponse>> {
     let invalid = || AppError::Unauthorized("Invalid playername or password".into());
+    let playername = normalize_handle(&req.playername);
+    let attempt = Attempt::new("player", &playername, &headers);
+    state.login_throttle.check(&attempt)?;
 
-    let (id, hash) = players::find_credentials(&state.db, &normalize_handle(&req.playername))
-        .await?
-        .ok_or_else(invalid)?;
-
-    if !password::verify(req.password, hash).await? {
+    let credentials = players::find_credentials(&state.db, &playername).await?;
+    // Same cost whether or not the account exists (no playername enumeration by timing).
+    let hash = credentials.as_ref().map(|(_, h)| h.clone());
+    if !password::verify_or_dummy(req.password, hash).await? {
+        state.login_throttle.record_failure(&attempt);
         return Err(invalid());
     }
+    let (id, _) = credentials.ok_or_else(invalid)?;
+    state.login_throttle.record_success(&attempt);
 
     let token = jwt::create_token(
         id,

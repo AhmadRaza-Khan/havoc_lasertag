@@ -1,4 +1,4 @@
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -20,6 +20,14 @@ pub struct Claims {
     pub kind: TokenKind,
     pub iat: i64,
     pub exp: i64,
+}
+
+impl Claims {
+    /// False if the account's password changed after this token was issued: resetting a
+    /// password signs out every existing session. (Both sides have second precision.)
+    pub fn issued_after(&self, password_changed_at: DateTime<Utc>) -> bool {
+        self.iat >= password_changed_at.timestamp()
+    }
 }
 
 pub fn create_token(
@@ -66,6 +74,23 @@ mod tests {
         let token = create_token(id, TokenKind::Admin, SECRET, 1).unwrap();
         let claims = verify_token(&token, SECRET).unwrap();
         assert_eq!((claims.sub, claims.kind), (id, TokenKind::Admin));
+    }
+
+    #[test]
+    fn tokens_before_password_change_are_stale() {
+        let claims = Claims {
+            sub: Uuid::nil(),
+            kind: TokenKind::Player,
+            iat: 1_000,
+            exp: 2_000,
+        };
+        let at = |secs| DateTime::from_timestamp(secs, 0).unwrap();
+        assert!(claims.issued_after(at(999)));
+        assert!(
+            claims.issued_after(at(1_000)),
+            "same second counts as after"
+        );
+        assert!(!claims.issued_after(at(1_001)));
     }
 
     #[test]

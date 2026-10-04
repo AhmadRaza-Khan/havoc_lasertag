@@ -24,12 +24,13 @@ npm install
 npm run dev          # http://localhost:5173
 ```
 
-Create a user (there is no signup page):
+Create the first admin (only possible while no admin exists; after that, only a signed-in
+admin can create admins — send their token as `Authorization: Bearer …`):
 
 ```bash
 curl -X POST http://localhost:8080/api/auth/signup \
   -H 'Content-Type: application/json' \
-  -d '{"username":"admin","name":"Admin","password":"change-me-123"}'
+  -d '{"username":"admin","name":"Admin","password":"Admin@1501"}'
 ```
 
 ## Project structure
@@ -88,6 +89,30 @@ Imports use the `@/` alias for `src/`. Server data is fetched with TanStack Quer
 add its route inside the `AdminLayout` group in `app/router.tsx`, and add a sidebar entry in
 `app/navigation.ts`.
 
+## Security model
+
+- **Two kinds of token, never interchangeable** (`kind` claim): admin tokens only work on admin
+  routes, player tokens only on `/api/player/*` and the chat socket (403 otherwise).
+- **Every request re-checks the account**: deleted accounts and tokens issued before a password
+  reset are rejected (401). An admin resetting a player's password or deleting them also closes
+  that player's open chat sockets.
+- **Players only ever see their own data**: bookings are filtered by the token's player id; chat
+  history and read receipts are scoped to conversations that include the caller; other players
+  are visible only as name/playername/online status (never phone or email).
+- **Logins** are throttled (5 failures per client, 20 per account, per 15 min → 429) and take the
+  same time whether or not the account exists.
+- **Admin cookie** is httpOnly + SameSite=Lax, and writes from other sites' pages are refused by
+  an Origin check (CSRF). API responses are `Cache-Control: no-store`.
+- **Admin signup** is only open while no admin exists (first-admin bootstrap).
+
+`scripts/authz-check.mjs` verifies all of the above against a running dev server (every route ×
+no token / wrong token kind / forged token / another player). Run it after changing routes:
+
+```bash
+API=http://localhost:8080/api ADMIN_PASSWORD=... node scripts/authz-check.mjs
+# add WITH_BOOKINGS=1 only when the server uses a mock/test Bookeo (it creates bookings)
+```
+
 ## API
 
 Two kinds of token, never interchangeable: **admin** (web panel; httpOnly cookie or Bearer) and
@@ -98,7 +123,7 @@ Two kinds of token, never interchangeable: **admin** (web panel; httpOnly cookie
 | Method | Path | Auth | Notes |
 |---|---|---|---|
 | GET | `/api/health` | — | |
-| POST | `/api/auth/signup` | — | `{username, name, password}` |
+| POST | `/api/auth/signup` | admin (or none for the very first admin) | `{username, name, password}` |
 | POST | `/api/auth/login` | — | `{username, password}` → sets httpOnly cookie, returns `{token, user}` |
 | POST | `/api/auth/logout` | — | clears cookie |
 | GET | `/api/auth/me` | cookie or `Bearer` | current user |
@@ -118,6 +143,16 @@ Two kinds of token, never interchangeable: **admin** (web panel; httpOnly cookie
 Admin booking changes are sent to Bookeo as staff actions (`mode=backend`) without notifying staff;
 player bookings notify staff. Customers get Bookeo's emails when they have an email address.
 
+| POST | `/api/stats/imports` | admin | multipart field `file`: a game report PDF → 202, processed in the background |
+| GET | `/api/stats/imports/{id}` | admin | poll until `status` is `completed` / `failed` (with players matched, unmatched names, warnings) |
+| GET | `/api/stats/imports` | admin | last 10 uploads |
+| GET | `/api/stats/leaderboard` | admin | general report: every player's all-time totals, ranked by points |
+| GET | `/api/offers?search=&page=&per_page=` | admin | paginated, newest first; search matches title or description |
+| POST | `/api/offers` | admin | `{title, description, is_active?, starts_on?, ends_on?}` — dates `YYYY-MM-DD`, inclusive; `is_active` defaults to `true` |
+| GET | `/api/offers/{id}` | admin | |
+| PUT | `/api/offers/{id}` | admin | same body |
+| DELETE | `/api/offers/{id}` | admin | |
+
 ### Player (mobile app)
 
 | Method | Path | Notes |
@@ -129,6 +164,35 @@ player bookings notify staff. Customers get Bookeo's emails when they have an em
 | POST | `/api/player/bookings` | `{product_id, event_id, num_people}` → booking (201). Bookeo rejections (slot full, …) → 422 |
 | GET | `/api/player/bookings?when=upcoming\|past&page=&per_page=` | the player's own bookings |
 | GET | `/api/player/bookings/{id}` | one booking, status refreshed from Bookeo |
+
+| GET | `/api/player/stats` | my all-time totals and leaderboard `position` (`null` until I've played) |
+| GET | `/api/player/stats/games?page=&per_page=` | my game records, newest first — every field from my page |
+| GET | `/api/player/stats/games/{game_id}` | my record in one game (404 if I didn't play it) |
+
+| GET | `/api/player/offers` | promotions live today: active and within their dates (business timezone), newest first. Plain array of `{id, title, description, starts_on, ends_on, …}` |
+
+### Game statistics (PDF import)
+
+The arena exports a report per game (`Total_statistic_HH:MM.pdf`). Page 1 is a text table
+(name, ID, points, efficiency, frags, deactivated, shots, hits, accuracy); pages 2+ are scanned
+images, one per player (team, team score, scenario, nominations, the 12 personal stats incl.
+Efficiency KDR, victims and insulters).
+
+- **Reading:** page 1 is parsed as text (exact). Player pages are read by OCR (`ocrs`, pure Rust;
+  models embedded in the binary by `build.rs`) at the template's fixed field positions, ~4 s/page.
+  Each page is linked to its page-1 row by the in-game ID (name double-checked).
+- **Trust:** fields on both pages (points, shots, hits, frags, deactivated, accuracy) are taken
+  from page 1; any difference is saved as a warning on the import. Efficiency (page 1) and
+  Efficiency KDR (player page) are stored separately.
+- **Matching:** names are lowercased and matched to `playername`. Unknown names are kept
+  (unlinked) and reported; creating a player with that playername links them automatically.
+- **Safety:** one transaction per game (all or nothing), append-only (nothing is overwritten or
+  deleted), duplicates refused (same file hash or same game fingerprint), uploads ≤ 25 MB, one
+  import at a time. The uploaded file lives in a private temp folder and is deleted afterwards —
+  success or failure.
+
+Regression test on a real report (not in CI, needs the file):
+`STATS_PDF=/path/Total_statistic_17:43.pdf cargo test --release real_report -- --ignored`
 
 ### Chat (mobile app, player token)
 

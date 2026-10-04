@@ -1,4 +1,4 @@
-import { CalendarDays, LayoutDashboard, Users } from 'lucide-react'
+import { CalendarDays, LayoutDashboard, Megaphone, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 export type NavItem = {
@@ -15,4 +15,5 @@ export const navItems: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/players', label: 'Players', icon: Users },
   { to: '/bookings', label: 'Bookings', icon: CalendarDays },
+  { to: '/offers', label: 'Offers', icon: Megaphone },
 ]

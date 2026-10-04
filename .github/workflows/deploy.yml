@@ -1,0 +1,173 @@
+name: Deploy
+
+# Builds on GitHub and ships only artifacts to the VPS:
+#   - the Rust API as one static binary (musl; no toolchain or system libraries needed there)
+#   - the React app as static files (client/dist)
+# Setup, secrets and variables: see deploy/README.md.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never run two deploys at once; don't cancel one half-way.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  RUST_TARGET: x86_64-unknown-linux-musl
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
+  build-server:
+    name: Build API binary
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install musl C toolchain (for ring/rustls)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends musl-tools
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.RUST_TARGET }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+          key: ${{ env.RUST_TARGET }}
+
+      - name: Build static release binary
+        working-directory: server
+        env:
+          CC_x86_64_unknown_linux_musl: musl-gcc
+        run: cargo build --release --locked --target "$RUST_TARGET"
+
+      - name: Check the binary is static
+        run: |
+          BIN="server/target/$RUST_TARGET/release/server"
+          file "$BIN"
+          file "$BIN" | grep -q 'static' || { echo "::error::binary is not statically linked"; exit 1; }
+          ls -lh "$BIN"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: api-binary
+          path: server/target/${{ env.RUST_TARGET }}/release/server
+          if-no-files-found: error
+          retention-days: 14
+
+  build-client:
+    name: Build web app
+    needs: ci
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - run: npm ci
+
+      - name: Build
+        env:
+          # Overrides client/.env.production when the repo variable is set.
+          VITE_API_URL: ${{ vars.API_URL || 'https://backend.example.com' }}
+          VITE_BUSINESS_TIMEZONE: ${{ vars.BUSINESS_TIMEZONE || 'Asia/Qatar' }}
+        run: npm run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: client/dist
+          if-no-files-found: error
+          retention-days: 14
+
+  deploy:
+    name: Deploy to VPS
+    needs: [build-server, build-client]
+    runs-on: ubuntu-latest
+    # Configure protection rules (e.g. required reviewers) under Settings → Environments.
+    environment:
+      name: production
+      url: ${{ vars.WEB_URL || 'https://example.com' }}
+    steps:
+      # Only for deploy/scripts/activate.sh, which is piped over SSH (not copied to the VPS).
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            deploy/scripts
+            .github/actions
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: api-binary
+          path: artifacts/api
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: artifacts/web
+
+      - uses: ./.github/actions/setup-ssh
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          user: ${{ secrets.VPS_USER }}
+          port: ${{ secrets.VPS_PORT || '22' }}
+          private-key: ${{ secrets.VPS_SSH_KEY }}
+          known-hosts: ${{ secrets.VPS_KNOWN_HOSTS }}
+
+      - name: Name the release
+        id: release
+        # Sortable by time; the short SHA ties it to the commit.
+        run: echo "name=$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release
+        env:
+          RELEASE: ${{ steps.release.outputs.name }}
+          API_ROOT: ${{ vars.API_ROOT || '/opt/havoc' }}
+          WEB_ROOT: ${{ vars.WEB_ROOT || '/var/www/havoc' }}
+        run: |
+          set -euo pipefail
+          # Artifacts lose the executable bit; the archive restores it.
+          chmod 755 artifacts/api/server
+          ssh vps "mkdir -p '$API_ROOT/releases/$RELEASE' '$WEB_ROOT/releases/$RELEASE'"
+          tar -C artifacts/api -cz server | ssh vps "tar -xz -C '$API_ROOT/releases/$RELEASE'"
+          tar -C artifacts/web -cz . | ssh vps "tar -xz -C '$WEB_ROOT/releases/$RELEASE'"
+          echo "Uploaded release $RELEASE"
+
+      - name: Activate release (health-checked, auto-rollback)
+        env:
+          RELEASE: ${{ steps.release.outputs.name }}
+          API_ROOT: ${{ vars.API_ROOT || '/opt/havoc' }}
+          WEB_ROOT: ${{ vars.WEB_ROOT || '/var/www/havoc' }}
+          HEALTH_URL: ${{ vars.HEALTH_URL || 'http://127.0.0.1:8080/api/health' }}
+        run: |
+          ssh vps "API_ROOT='$API_ROOT' WEB_ROOT='$WEB_ROOT' HEALTH_URL='$HEALTH_URL' bash -s -- activate '$RELEASE'" \
+            < deploy/scripts/activate.sh
+
+      - name: Summary
+        if: success()
+        env:
+          RELEASE: ${{ steps.release.outputs.name }}
+        run: |
+          {
+            echo "### Deployed \`$RELEASE\`"
+            echo "- Web: ${{ vars.WEB_URL || 'https://example.com' }}"
+            echo "- API: ${{ vars.API_URL || 'https://backend.example.com' }}"
+            echo "Roll back with the **Rollback** workflow."
+          } >> "$GITHUB_STEP_SUMMARY"

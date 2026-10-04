@@ -1,7 +1,12 @@
+use std::collections::{HashMap, HashSet};
+
 use uuid::Uuid;
 
 use super::{
-    dto::{AdminListQuery, CreateBookingRequest, ListQuery, UpdateBookingRequest},
+    dto::{
+        AdminListQuery, CreateBookingRequest, ListQuery, PlayerSummary, UpdateBookingRequest,
+        validate_group,
+    },
     model::{BookingRow, BookingWithPlayer, status_of},
     repository::{self, AdminFilter, BookingChanges, NewBookingRow},
 };
@@ -70,6 +75,8 @@ pub async fn create(
     let player = players::find_by_id(&state.db, player_id)
         .await?
         .ok_or_else(|| AppError::NotFound("Player not found".into()))?;
+    // Checked before anything is booked in Bookeo.
+    check_other_players(state, player_id, &req.other_player_ids).await?;
     let customer_id = ensure_bookeo_customer(state, player_id).await?;
 
     let id = Uuid::new_v4();
@@ -105,6 +112,7 @@ pub async fn create(
             start_time: start,
             end_time: end,
             num_people: req.num_people,
+            other_players: &req.other_player_ids,
             status: status_of(&booking),
             price_amount: price.map(|m| m.amount.as_str()),
             price_currency: price.map(|m| m.currency.as_str()),
@@ -136,6 +144,12 @@ pub async fn update(
         return Err(AppError::Conflict(
             "Canceled bookings can't be changed".into(),
         ));
+    }
+
+    match &req.other_player_ids {
+        Some(others) => check_other_players(state, row.player_id, others).await?,
+        // Keeping the current other players: the new group size must still fit them.
+        None => validate_group(req.num_people, row.other_players.len())?,
     }
 
     let product = bookable_product(state, &row.product_id).await?;
@@ -172,6 +186,7 @@ pub async fn update(
         &BookingChanges {
             event_id: Some(booking.event_id.as_deref().unwrap_or(&req.event_id)),
             num_people: Some(booking.num_people().unwrap_or(req.num_people)),
+            other_players: req.other_player_ids.as_deref(),
             status: status_of(&booking),
             start_time: start,
             end_time: end,
@@ -279,6 +294,7 @@ pub async fn get(state: &AppState, id: Uuid, player_id: Option<Uuid>) -> AppResu
         &BookingChanges {
             event_id: booking.event_id.as_deref(),
             num_people: booking.num_people(),
+            other_players: None,
             status: status_of(&booking),
             start_time: start.to_utc(),
             end_time: end.to_utc(),
@@ -303,6 +319,50 @@ async fn find(state: &AppState, id: Uuid, player_id: Option<Uuid>) -> AppResult<
     repository::find(&state.db, id, player_id)
         .await?
         .ok_or_else(not_found)
+}
+
+/// Other players must be existing players and can't include the booking's own player.
+async fn check_other_players(state: &AppState, player_id: Uuid, others: &[Uuid]) -> AppResult<()> {
+    if others.contains(&player_id) {
+        return Err(AppError::BadRequest(
+            "The booking's player is already in the group; don't add them as an other player"
+                .into(),
+        ));
+    }
+    let found = repository::player_summaries(&state.db, others).await?;
+    if found.len() != others.len() {
+        return Err(AppError::NotFound(
+            "One of the other players doesn't exist".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Name/playername of every other player referenced by `rows`, in one query.
+pub async fn other_players_lookup<'a>(
+    state: &AppState,
+    rows: impl IntoIterator<Item = &'a BookingRow>,
+) -> AppResult<HashMap<Uuid, PlayerSummary>> {
+    let ids: Vec<Uuid> = rows
+        .into_iter()
+        .flat_map(|r| r.other_players.iter().copied())
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    Ok(repository::player_summaries(&state.db, &ids)
+        .await?
+        .into_iter()
+        .map(|(id, full_name, playername)| {
+            (
+                id,
+                PlayerSummary {
+                    id,
+                    full_name,
+                    playername,
+                },
+            )
+        })
+        .collect())
 }
 
 fn not_found() -> AppError {

@@ -112,6 +112,25 @@ p {
   padding: 16px;
 }
 
+.login-brand {
+  margin: -32px -32px 0;
+  padding: 28px 32px;
+  background: var(--sidebar-bg);
+  border-radius: 12px 12px 0 0;
+}
+
+.login-brand img {
+  display: block;
+  width: 100%;
+  max-width: 260px;
+  height: auto;
+  margin: 0 auto;
+}
+
+.login-title {
+  font-size: 1.25rem;
+}
+
 .card {
   width: 100%;
   max-width: 380px;
@@ -135,7 +154,8 @@ label {
 }
 
 input,
-select {
+select,
+textarea {
   font: inherit;
   color: inherit;
   padding: 9px 12px;
@@ -150,13 +170,20 @@ select {
   cursor: pointer;
 }
 
+textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
 }
 
-input::placeholder {
+input::placeholder,
+textarea::placeholder {
   color: var(--muted);
 }
 

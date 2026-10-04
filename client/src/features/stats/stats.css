@@ -1,0 +1,240 @@
+/* Dashboard tabs */
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  font: inherit;
+  font-weight: 600;
+  padding: 10px 16px;
+  margin-bottom: -1px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* The display rule above would otherwise override the hidden attribute. */
+.dashboard[hidden] {
+  display: none;
+}
+
+.dashboard h2 {
+  font-size: 1.05rem;
+}
+
+/* Upload */
+
+.stats-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 24px 16px;
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  text-align: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.dropzone p {
+  margin: 0;
+}
+
+.dropzone.dragging {
+  border-color: var(--accent);
+  background: var(--row-hover);
+}
+
+.dropzone.busy {
+  opacity: 0.6;
+}
+
+.link-button {
+  font: inherit;
+  font-weight: 600;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.link-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.import-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 0.92rem;
+}
+
+.import-processing,
+.import-failed {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.import-processing {
+  background: var(--neutral-bg);
+}
+
+.import-failed {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.import-done {
+  background: var(--success-bg);
+}
+
+.import-result-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--success);
+}
+
+.import-note {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  color: var(--warning);
+}
+
+.import-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.import-warnings summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.import-warnings ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  color: var(--muted);
+}
+
+.import-history h3 {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.import-history ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.import-history li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.import-file {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-history .ok {
+  color: var(--success);
+  flex-shrink: 0;
+}
+
+.import-history .bad {
+  color: var(--danger);
+  flex-shrink: 0;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Leaderboard */
+
+.leaderboard .num {
+  text-align: right;
+}
+
+.leaderboard th.num:first-child,
+.leaderboard td.num:first-child {
+  text-align: center;
+  width: 1%;
+}
+
+.rank {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.rank-1 {
+  background: #f5c542;
+  color: #3d2c00;
+}
+
+.rank-2 {
+  background: #cfd4dc;
+  color: #2a2e35;
+}
+
+.rank-3 {
+  background: #d99a5b;
+  color: #3a1f05;
+}

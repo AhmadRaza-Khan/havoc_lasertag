@@ -35,7 +35,8 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     // Send/receive the httpOnly auth cookie across the api subdomain
     credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
+      // File uploads (FormData) set their own multipart content type and boundary.
+      ...(!(init.body instanceof FormData) && { 'Content-Type': 'application/json' }),
       ...init.headers,
     },
   })

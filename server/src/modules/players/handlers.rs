@@ -10,7 +10,12 @@ use super::{
     model::Player,
     service,
 };
-use crate::{error::AppResult, shared::pagination::Paginated, state::AppState};
+use crate::{
+    error::AppResult,
+    modules::{chats, stats},
+    shared::pagination::Paginated,
+    state::AppState,
+};
 
 pub async fn list(
     State(state): State<AppState>,
@@ -28,6 +33,8 @@ pub async fn create(
     Json(input): Json<PlayerInput>,
 ) -> AppResult<(StatusCode, Json<Player>)> {
     let player = service::create(&state.db, input).await?;
+    // Stats from earlier uploads that listed this name become theirs.
+    stats::link_unclaimed_records(&state, player.id, &player.playername).await;
     Ok((StatusCode::CREATED, Json(player)))
 }
 
@@ -36,10 +43,17 @@ pub async fn update(
     Path(id): Path<Uuid>,
     Json(input): Json<PlayerInput>,
 ) -> AppResult<Json<Player>> {
-    Ok(Json(service::update(&state.db, id, input).await?))
+    let password_reset = input.password.as_deref().is_some_and(|p| !p.is_empty());
+    let player = service::update(&state.db, id, input).await?;
+    if password_reset {
+        // Their tokens are now rejected; close live chat sockets too.
+        chats::disconnect_player(&state, id);
+    }
+    Ok(Json(player))
 }
 
 pub async fn delete(State(state): State<AppState>, Path(id): Path<Uuid>) -> AppResult<StatusCode> {
     service::delete(&state.db, id).await?;
+    chats::disconnect_player(&state, id);
     Ok(StatusCode::NO_CONTENT)
 }

@@ -21,7 +21,7 @@ use super::{
 };
 use crate::{
     error::{AppError, AppResult},
-    modules::player_auth::player_id_from_token,
+    modules::player_auth::authenticate_player,
     state::AppState,
 };
 
@@ -52,13 +52,8 @@ pub async fn connect(
         .map(str::to_owned)
         .or(query.token)
         .ok_or_else(|| AppError::Unauthorized("Not authenticated".into()))?;
-    let player_id = player_id_from_token(&token, &state)?;
-    if repository::find_player(&state.db, player_id)
-        .await?
-        .is_none()
-    {
-        return Err(AppError::Unauthorized("Player no longer exists".into()));
-    }
+    // Same checks as every player route: player token, account exists, password unchanged.
+    let player_id = authenticate_player(&token, &state).await?;
 
     Ok(ws
         .max_message_size(MAX_FRAME_BYTES)

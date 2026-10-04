@@ -13,6 +13,7 @@ import {
   formatMoney,
   formatTimeRange,
 } from '@/lib/format'
+import { OtherPlayers } from '../components/OtherPlayers'
 import { PlayerPicker } from '../components/PlayerPicker'
 import type { PickedPlayer } from '../components/PlayerPicker'
 import { SlotPicker } from '../components/SlotPicker'
@@ -80,7 +81,27 @@ function BookingForm({ booking }: { booking: Booking | null }) {
         }
       : null,
   )
+  const [others, setOthers] = useState<PickedPlayer[]>(booking?.other_players ?? [])
   const [numPeople, setNumPeople] = useState(String(booking?.num_people ?? ''))
+
+  // The group is the player plus the other players (plus any unregistered guests), so the
+  // number of people follows the list: adding a player raises it to fit, removing one lowers
+  // it by one. The admin can still type a larger number for guests.
+  function addOther(p: PickedPlayer) {
+    const next = [...others, p]
+    setOthers(next)
+    setNumPeople((n) => String(Math.max(Number(n) || 0, next.length + 1)))
+  }
+  function removeOther(p: PickedPlayer) {
+    const next = others.filter((o) => o.id !== p.id)
+    setOthers(next)
+    setNumPeople((n) => String(Math.max(next.length + 1, (Number(n) || 1) - 1)))
+  }
+  function selectPlayer(p: PickedPlayer | null) {
+    setPlayer(p)
+    // The booking's player can't also be listed among the others.
+    if (p && others.some((o) => o.id === p.id)) removeOther(p)
+  }
 
   const games = useGames()
   const game = games.data?.find((g) => g.product_id === productId) ?? null
@@ -107,7 +128,7 @@ function BookingForm({ booking }: { booking: Booking | null }) {
     : null
 
   const people = Number(numPeople)
-  const peopleError = validatePeople(people, numPeople, game, slotCapacity)
+  const peopleError = validatePeople(people, numPeople, game, slotCapacity, others.length)
   const canSubmit =
     player !== null && game !== null && slot !== null && !peopleError && !mutation.isPending
 
@@ -121,7 +142,14 @@ function BookingForm({ booking }: { booking: Booking | null }) {
     if (!canSubmit || !player || !game || !slot) return
     if (booking) {
       update.mutate(
-        { id: booking.id, input: { event_id: slot.event_id, num_people: people } },
+        {
+          id: booking.id,
+          input: {
+            event_id: slot.event_id,
+            num_people: people,
+            other_player_ids: others.map((o) => o.id),
+          },
+        },
         {
           onSuccess: (b) =>
             navigate('/bookings', { state: { flash: `Booking #${b.booking_number} updated.` } }),
@@ -129,7 +157,13 @@ function BookingForm({ booking }: { booking: Booking | null }) {
       )
     } else {
       create.mutate(
-        { player_id: player.id, product_id: game.product_id, event_id: slot.event_id, num_people: people },
+        {
+          player_id: player.id,
+          product_id: game.product_id,
+          event_id: slot.event_id,
+          num_people: people,
+          other_player_ids: others.map((o) => o.id),
+        },
         {
           onSuccess: (b) =>
             navigate('/bookings', {
@@ -156,11 +190,23 @@ function BookingForm({ booking }: { booking: Booking | null }) {
               secondary={`@${booking.player.playername}`}
             />
           ) : (
-            <PlayerPicker value={player} onChange={setPlayer} />
+            <PlayerPicker value={player} onChange={selectPlayer} />
           )}
         </Step>
 
-        <Step n={2} title="Game">
+        <Step n={2} title="Other players" optional>
+          <p className="muted small">
+            Registered players joining this booking. Each one is counted in the number of people.
+          </p>
+          <OtherPlayers
+            value={others}
+            mainPlayerId={player?.id ?? null}
+            onAdd={addOther}
+            onRemove={removeOther}
+          />
+        </Step>
+
+        <Step n={3} title="Game">
           {booking ? (
             <ReadOnly
               primary={booking.game_name}
@@ -187,7 +233,7 @@ function BookingForm({ booking }: { booking: Booking | null }) {
           {game && <GameFacts game={game} />}
         </Step>
 
-        <Step n={3} title="Dates">
+        <Step n={4} title="Dates">
           <div className="form-row">
             <label>
               From
@@ -218,7 +264,7 @@ function BookingForm({ booking }: { booking: Booking | null }) {
           {rangeError && <p className="error">{rangeError}</p>}
         </Step>
 
-        <Step n={4} title="Slot">
+        <Step n={5} title="Slot">
           {booking && (
             <div className="current-slot">
               <span className="muted small">Current slot</span>
@@ -267,19 +313,25 @@ function BookingForm({ booking }: { booking: Booking | null }) {
           )}
         </Step>
 
-        <Step n={5} title="Number of people">
+        <Step n={6} title="Number of people">
           <label className="people-input">
             <span className="sr-only">Number of people</span>
             <input
               type="number"
               inputMode="numeric"
-              min={game?.min_people ?? 1}
+              min={Math.max(game?.min_people ?? 1, others.length + 1)}
               max={Math.min(game?.max_people ?? 100, slotCapacity ?? 100)}
               value={numPeople}
               onChange={(e) => setNumPeople(e.target.value)}
               placeholder={game?.min_people ? `${game.min_people}–${game.max_people}` : ''}
             />
           </label>
+          {others.length > 0 && (
+            <p className="muted small">
+              Includes {player?.full_name ?? 'the player'} and {others.length} other player
+              {others.length === 1 ? '' : 's'}. Raise it for unregistered guests.
+            </p>
+          )}
           {numPeople !== '' && peopleError && <p className="error">{peopleError}</p>}
         </Step>
       </div>
@@ -295,6 +347,12 @@ function BookingForm({ booking }: { booking: Booking | null }) {
         <dl>
           <dt>Player</dt>
           <dd>{player ? player.full_name : <span className="muted">Not selected</span>}</dd>
+          {others.length > 0 && (
+            <>
+              <dt>With</dt>
+              <dd>{others.map((o) => o.full_name).join(', ')}</dd>
+            </>
+          )}
           <dt>Game</dt>
           <dd>{game?.name ?? booking?.game_name ?? <span className="muted">Not selected</span>}</dd>
           <dt>Slot</dt>
@@ -332,12 +390,23 @@ function BookingForm({ booking }: { booking: Booking | null }) {
   )
 }
 
-function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
+function Step({
+  n,
+  title,
+  optional = false,
+  children,
+}: {
+  n: number
+  title: string
+  optional?: boolean
+  children: ReactNode
+}) {
   return (
     <section className="booking-step panel panel-padded">
       <h3>
         <span className="step-number">{n}</span>
         {title}
+        {optional && <span className="muted small step-optional">(optional)</span>}
       </h3>
       {children}
     </section>
@@ -378,8 +447,11 @@ function validatePeople(
   raw: string,
   game: Game | null,
   slotCapacity: number | null,
+  others: number,
 ): string | null {
   if (raw === '' || !Number.isInteger(people) || people < 1) return 'Enter the number of people.'
+  if (people < others + 1)
+    return `At least ${others + 1}: the player plus ${others} other player${others === 1 ? '' : 's'}.`
   if (game?.min_people != null && game.max_people != null) {
     if (people < game.min_people || people > game.max_people)
       return `This game is for ${game.min_people}–${game.max_people} people.`

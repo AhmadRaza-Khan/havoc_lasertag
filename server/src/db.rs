@@ -11,7 +11,11 @@ pub async fn connect(database_url: &str) -> sqlx::Result<PgPool> {
 }
 
 pub async fn migrate(db: &PgPool) -> Result<(), sqlx::migrate::MigrateError> {
-    sqlx::migrate!("./migrations").run(db).await?;
+    let mut migrator = sqlx::migrate!("./migrations");
+    // Lets a rolled-back (older) binary start against a database that newer releases have
+    // already migrated. Migrations must therefore stay backward compatible (additive).
+    migrator.set_ignore_missing(true);
+    migrator.run(db).await?;
     tracing::info!("database migrations applied");
     Ok(())
 }

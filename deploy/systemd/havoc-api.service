@@ -1,0 +1,35 @@
+[Unit]
+Description=Havoc Laser Tag API
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=havoc
+Group=havoc
+# `current` is the symlink switched by each deploy.
+WorkingDirectory=/opt/havoc/current
+ExecStart=/opt/havoc/current/server
+EnvironmentFile=/opt/havoc/shared/.env
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+
+# Many long-lived chat WebSockets.
+LimitNOFILE=65536
+
+# Hardening: the API only needs the network and its config.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

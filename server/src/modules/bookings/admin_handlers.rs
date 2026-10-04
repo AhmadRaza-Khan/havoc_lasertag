@@ -19,9 +19,12 @@ pub async fn list(
 ) -> AppResult<Json<Paginated<BookingResponse>>> {
     let page = service::list_all(&state, query).await?;
     let tz = state.config.bookeo.timezone;
-    Ok(Json(
-        page.map(|r| BookingResponse::from_row_with_player(r, tz)),
-    ))
+    let others =
+        service::other_players_lookup(&state, page.items.iter().map(|r| &r.booking)).await?;
+    Ok(Json(page.map(|r| {
+        let ids = r.booking.other_players.clone();
+        BookingResponse::from_row_with_player(r, tz).with_other_players(&ids, &others)
+    })))
 }
 
 pub async fn get(
@@ -60,8 +63,10 @@ pub async fn cancel(
 
 async fn respond(state: &AppState, id: Uuid) -> AppResult<Json<BookingResponse>> {
     let row = service::with_player(state, id).await?;
-    Ok(Json(BookingResponse::from_row_with_player(
-        row,
-        state.config.bookeo.timezone,
-    )))
+    let others = service::other_players_lookup(state, [&row.booking]).await?;
+    let ids = row.booking.other_players.clone();
+    Ok(Json(
+        BookingResponse::from_row_with_player(row, state.config.bookeo.timezone)
+            .with_other_players(&ids, &others),
+    ))
 }

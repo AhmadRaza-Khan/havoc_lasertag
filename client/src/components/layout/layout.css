@@ -24,23 +24,16 @@
 }
 
 .sidebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 8px;
-  font-weight: 700;
-  font-size: 1.05rem;
-  color: #fff;
+  display: block;
+  padding: 4px 8px 0;
 }
 
+/* Wide wordmark (899×277); the tagline is white, which suits the dark sidebar. */
 .sidebar-logo {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: var(--accent);
-  font-weight: 800;
+  display: block;
+  width: 100%;
+  max-width: 200px;
+  height: auto;
 }
 
 .sidebar-nav {
@@ -164,6 +157,15 @@
 
   .sidebar-user {
     display: none;
+  }
+
+  .sidebar-brand {
+    padding: 0;
+  }
+
+  .sidebar-logo {
+    width: auto;
+    height: 32px;
   }
 
   .page-header {

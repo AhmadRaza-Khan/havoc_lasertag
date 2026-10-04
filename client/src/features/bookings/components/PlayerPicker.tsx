@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { Search } from 'lucide-react'
 import { usePlayers } from '@/features/players'
@@ -9,16 +9,39 @@ export type PickedPlayer = { id: string; full_name: string; playername: string }
 type PlayerPickerProps = {
   value: PickedPlayer | null
   onChange: (player: PickedPlayer | null) => void
+  /** Player ids that can't be picked (e.g. already in the group). */
+  exclude?: string[]
+  placeholder?: string
 }
 
+const RESULTS = 8
+
 /** Searchable player combobox backed by the players API. */
-export function PlayerPicker({ value, onChange }: PlayerPickerProps) {
+export function PlayerPicker({
+  value,
+  onChange,
+  exclude = [],
+  placeholder = 'Search by playername or name',
+}: PlayerPickerProps) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const search = useDebouncedValue(query.trim(), 250)
-  const { data, isFetching } = usePlayers({ search, page: 1, per_page: 8 })
+  // Fetch extra rows so excluded players don't leave the list short.
+  const { data, isFetching } = usePlayers({
+    search,
+    page: 1,
+    per_page: Math.min(RESULTS + exclude.length, 100),
+  })
   const listId = useId()
+  // Closing is delayed on blur so a click on an option still registers; refocusing must
+  // cancel that pending close, or the list would shut right after it reopens.
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancelClose = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current)
+    closeTimer.current = null
+  }
+  useEffect(() => cancelClose, [])
 
   if (value) {
     return (
@@ -34,7 +57,7 @@ export function PlayerPicker({ value, onChange }: PlayerPickerProps) {
     )
   }
 
-  const options = data?.items ?? []
+  const options = (data?.items ?? []).filter((p) => !exclude.includes(p.id)).slice(0, RESULTS)
 
   function pick(index: number) {
     const p = options[index]
@@ -67,19 +90,24 @@ export function PlayerPicker({ value, onChange }: PlayerPickerProps) {
         <input
           type="text"
           role="combobox"
-          aria-label="Search players"
+          aria-label={placeholder}
           aria-expanded={open}
           aria-controls={listId}
-          placeholder="Search by playername or name"
+          placeholder={placeholder}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value)
             setActive(0)
             setOpen(true)
           }}
-          onFocus={() => setOpen(true)}
-          // Delay so a click on an option registers before the list closes
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onFocus={() => {
+            cancelClose()
+            setOpen(true)
+          }}
+          onBlur={() => {
+            cancelClose()
+            closeTimer.current = setTimeout(() => setOpen(false), 150)
+          }}
           onKeyDown={onKeyDown}
         />
       </label>

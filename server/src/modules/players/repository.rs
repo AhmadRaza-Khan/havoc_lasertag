@@ -73,6 +73,9 @@ pub async fn update(
              phone = $4,
              email = $5,
              password_hash = COALESCE($6, password_hash),
+             -- A new password signs out every existing session (see shared::jwt).
+             password_changed_at = CASE WHEN $6 IS NULL THEN password_changed_at
+                                        ELSE date_trunc('second', now()) END,
              updated_at = now()
          WHERE id = $1
          RETURNING id, full_name, playername, phone, email, created_at, updated_at",
@@ -130,4 +133,15 @@ pub async fn set_bookeo_customer_id(
     .bind(customer_id)
     .fetch_one(db)
     .await
+}
+
+/// For session checks. `None` if the player no longer exists.
+pub async fn password_changed_at(
+    db: &PgPool,
+    id: Uuid,
+) -> sqlx::Result<Option<chrono::DateTime<chrono::Utc>>> {
+    sqlx::query_scalar("SELECT password_changed_at FROM players WHERE id = $1")
+        .bind(id)
+        .fetch_optional(db)
+        .await
 }

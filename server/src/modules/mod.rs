@@ -6,8 +6,10 @@ pub mod bookings;
 pub mod chats;
 pub mod games;
 pub mod health;
+pub mod offers;
 pub mod player_auth;
 pub mod players;
+pub mod stats;
 pub mod users;
 
 use axum::Router;
@@ -28,6 +30,8 @@ pub fn router(state: &AppState) -> Router<AppState> {
         .nest("/players", players::routes())
         .nest("/games", games::routes())
         .nest("/bookings", bookings::admin_routes())
+        .nest("/stats", stats::admin_routes())
+        .nest("/offers", offers::admin_routes())
         .route_layer(auth::require_auth(state));
 
     // Mobile app: everything here requires a player token.
@@ -35,6 +39,8 @@ pub fn router(state: &AppState) -> Router<AppState> {
         .nest("/player/games", games::routes())
         .nest("/player/bookings", bookings::player_routes())
         .nest("/player/chats", chats::routes())
+        .nest("/player/stats", stats::player_routes())
+        .nest("/player/offers", offers::player_routes())
         .route_layer(player_auth::require_player(state));
 
     public.merge(admin).merge(player)

@@ -8,6 +8,7 @@ use uuid::Uuid;
 use super::AUTH_COOKIE;
 use crate::{
     error::AppError,
+    modules::users::repository as users,
     shared::jwt::{self, TokenKind},
     state::AppState,
 };
@@ -15,8 +16,10 @@ use crate::{
 /// Authenticated admin user extracted from the request. Add it as a handler argument to get the
 /// caller, or protect a whole router group with [`super::require_auth`].
 ///
-/// Accepts either an `Authorization: Bearer <token>` header (mobile / API clients)
-/// or the httpOnly auth cookie (web client).
+/// Accepts either an `Authorization: Bearer <token>` header or the httpOnly auth cookie (web
+/// client). The token must be an admin token, and the account must still exist with no
+/// password change since the token was issued.
+#[derive(Debug, Clone)]
 pub struct AuthUser {
     pub id: Uuid,
 }
@@ -28,6 +31,11 @@ impl FromRequestParts<AppState> for AuthUser {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
+        // Already verified by the route-group layer for this request.
+        if let Some(user) = parts.extensions.get::<AuthUser>() {
+            return Ok(user.clone());
+        }
+
         let bearer = parts
             .headers
             .get(AUTHORIZATION)
@@ -47,6 +55,18 @@ impl FromRequestParts<AppState> for AuthUser {
         if claims.kind != TokenKind::Admin {
             return Err(AppError::Forbidden("Admin access required".into()));
         }
-        Ok(AuthUser { id: claims.sub })
+
+        let changed_at = users::password_changed_at(&state.db, claims.sub)
+            .await?
+            .ok_or_else(|| AppError::Unauthorized("Account no longer exists".into()))?;
+        if !claims.issued_after(changed_at) {
+            return Err(AppError::Unauthorized(
+                "Session expired, please sign in again".into(),
+            ));
+        }
+
+        let user = AuthUser { id: claims.sub };
+        parts.extensions.insert(user.clone());
+        Ok(user)
     }
 }

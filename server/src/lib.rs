@@ -32,8 +32,11 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
         db,
         bookeo: Arc::new(BookeoClient::new(&config.bookeo)?),
         chat: Arc::new(Default::default()),
+        login_throttle: Arc::new(Default::default()),
         config: Arc::new(config),
     };
+    // Imports interrupted by a restart can't resume: mark them failed, drop their temp files.
+    modules::stats::recover(&state).await?;
     let app = app::build(state)?;
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;

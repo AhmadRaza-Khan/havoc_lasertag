@@ -18,7 +18,11 @@ pub struct CreateBookingRequest {
     pub product_id: String,
     /// From `GET .../games/{product_id}/slots`.
     pub event_id: String,
+    /// Everyone in the group, including the booking's player and any `other_player_ids`.
     pub num_people: i32,
+    /// Optional: other registered players joining the booking.
+    #[serde(default)]
+    pub other_player_ids: Vec<Uuid>,
 }
 
 impl CreateBookingRequest {
@@ -31,10 +35,13 @@ impl CreateBookingRequest {
             ));
         }
         validate_num_people(self.num_people)?;
+        let other_player_ids = dedupe(self.other_player_ids);
+        validate_group(self.num_people, other_player_ids.len())?;
         Ok(Self {
             product_id,
             event_id,
             num_people: self.num_people,
+            other_player_ids,
         })
     }
 }
@@ -52,6 +59,8 @@ pub struct AdminCreateBookingRequest {
 pub struct UpdateBookingRequest {
     pub event_id: String,
     pub num_people: i32,
+    /// Replaces the other players; omit to keep them as they are.
+    pub other_player_ids: Option<Vec<Uuid>>,
 }
 
 impl UpdateBookingRequest {
@@ -61,11 +70,34 @@ impl UpdateBookingRequest {
             return Err(AppError::BadRequest("event_id is required".into()));
         }
         validate_num_people(self.num_people)?;
+        let other_player_ids = self.other_player_ids.map(dedupe);
+        if let Some(others) = &other_player_ids {
+            validate_group(self.num_people, others.len())?;
+        }
         Ok(Self {
             event_id,
             num_people: self.num_people,
+            other_player_ids,
         })
     }
+}
+
+/// The group is the booking's player plus the other players (plus any unregistered guests).
+pub fn validate_group(num_people: i32, others: usize) -> AppResult<()> {
+    let minimum = others as i32 + 1;
+    if num_people < minimum {
+        return Err(AppError::BadRequest(format!(
+            "Number of people must be at least {minimum} (the player plus {others} other player{})",
+            if others == 1 { "" } else { "s" }
+        )));
+    }
+    Ok(())
+}
+
+/// Removes repeated ids, keeping the first occurrence's order.
+fn dedupe(ids: Vec<Uuid>) -> Vec<Uuid> {
+    let mut seen = std::collections::HashSet::new();
+    ids.into_iter().filter(|id| seen.insert(*id)).collect()
 }
 
 fn validate_num_people(n: i32) -> AppResult<()> {
@@ -153,6 +185,8 @@ pub struct BookingResponse {
     /// Included in admin responses only.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub player: Option<PlayerSummary>,
+    /// Other registered players in the group (deleted players are left out).
+    pub other_players: Vec<PlayerSummary>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -163,7 +197,7 @@ pub struct BookingPrice {
     pub currency: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PlayerSummary {
     pub id: Uuid,
     pub full_name: String,
@@ -188,9 +222,23 @@ impl BookingResponse {
             status: row.status,
             price,
             player: None,
+            other_players: Vec::new(),
             created_at: row.created_at,
             updated_at: row.updated_at,
         }
+    }
+
+    /// Fills `other_players` from `ids` (the row's ids, in order) using `lookup`.
+    pub fn with_other_players(
+        mut self,
+        ids: &[Uuid],
+        lookup: &std::collections::HashMap<Uuid, PlayerSummary>,
+    ) -> Self {
+        self.other_players = ids
+            .iter()
+            .filter_map(|id| lookup.get(id).cloned())
+            .collect();
+        self
     }
 
     pub fn from_row_with_player(row: BookingWithPlayer, tz: Tz) -> Self {
@@ -215,7 +263,31 @@ mod tests {
             product_id: product.into(),
             event_id: event.into(),
             num_people: n,
+            other_player_ids: Vec::new(),
         }
+    }
+
+    #[test]
+    fn other_players_count_towards_the_group() {
+        let (a, b) = (Uuid::from_u128(1), Uuid::from_u128(2));
+        let mut r = req("p", "e", 3);
+        r.other_player_ids = vec![a, b, a];
+        let ok = r.validated().unwrap();
+        assert_eq!(
+            ok.other_player_ids,
+            [a, b],
+            "duplicates removed, order kept"
+        );
+
+        let mut too_small = req("p", "e", 2);
+        too_small.other_player_ids = vec![a, b];
+        let err = too_small.validated().unwrap_err();
+        assert!(err.to_string().contains("at least 3"), "{err}");
+
+        // More people than registered players is fine (unregistered guests).
+        let mut guests = req("p", "e", 6);
+        guests.other_player_ids = vec![a];
+        assert!(guests.validated().is_ok());
     }
 
     #[test]
@@ -232,11 +304,13 @@ mod tests {
         let ok = UpdateBookingRequest {
             event_id: " e ".into(),
             num_people: 3,
+            other_player_ids: None,
         };
         assert_eq!(ok.validated().unwrap().event_id, "e");
         let bad = UpdateBookingRequest {
             event_id: "e".into(),
             num_people: 0,
+            other_player_ids: None,
         };
         assert!(bad.validated().is_err());
     }

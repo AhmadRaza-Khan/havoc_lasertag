@@ -6,7 +6,7 @@ use super::model::{BookingRow, BookingWithPlayer};
 
 /// Every query aliases `bookings` as `b` so the same column list works with joins.
 const COLUMNS: &str = "b.id, b.player_id, b.bookeo_booking_number, b.product_id, b.product_name, \
-    b.event_id, b.start_time, b.end_time, b.num_people, b.status, b.price_amount, b.price_currency, \
+    b.event_id, b.start_time, b.end_time, b.num_people, b.other_players, b.status, b.price_amount, b.price_currency, \
     b.created_at, b.updated_at";
 
 const PLAYER_COLUMNS: &str = "p.full_name AS player_full_name, p.playername AS player_playername";
@@ -37,6 +37,7 @@ pub struct NewBookingRow<'a> {
     pub start_time: DateTime<Utc>,
     pub end_time: DateTime<Utc>,
     pub num_people: i32,
+    pub other_players: &'a [Uuid],
     pub status: &'a str,
     pub price_amount: Option<&'a str>,
     pub price_currency: Option<&'a str>,
@@ -45,8 +46,9 @@ pub struct NewBookingRow<'a> {
 pub async fn insert(db: &PgPool, b: &NewBookingRow<'_>) -> sqlx::Result<BookingRow> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "INSERT INTO bookings AS b (id, player_id, bookeo_booking_number, product_id, product_name,
-             event_id, start_time, end_time, num_people, status, price_amount, price_currency)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+             event_id, start_time, end_time, num_people, status, price_amount, price_currency,
+             other_players)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          RETURNING {COLUMNS}"
     )))
     .bind(b.id)
@@ -61,6 +63,7 @@ pub async fn insert(db: &PgPool, b: &NewBookingRow<'_>) -> sqlx::Result<BookingR
     .bind(b.status)
     .bind(b.price_amount)
     .bind(b.price_currency)
+    .bind(b.other_players)
     .fetch_one(db)
     .await
 }
@@ -179,6 +182,8 @@ pub async fn find_with_player(db: &PgPool, id: Uuid) -> sqlx::Result<Option<Book
 pub struct BookingChanges<'a> {
     pub event_id: Option<&'a str>,
     pub num_people: Option<i32>,
+    /// `None` keeps the current list.
+    pub other_players: Option<&'a [Uuid]>,
     pub status: &'a str,
     pub start_time: DateTime<Utc>,
     pub end_time: DateTime<Utc>,
@@ -200,6 +205,7 @@ pub async fn apply_changes(
              end_time = $6,
              price_amount = COALESCE($7, b.price_amount),
              price_currency = COALESCE($8, b.price_currency),
+             other_players = COALESCE($9, b.other_players),
              updated_at = now()
          WHERE b.id = $1
          RETURNING {COLUMNS}"
@@ -212,8 +218,23 @@ pub async fn apply_changes(
     .bind(c.end_time)
     .bind(c.price_amount)
     .bind(c.price_currency)
+    .bind(c.other_players)
     .fetch_one(db)
     .await
+}
+
+/// Name and playername for each existing player among `ids` (deleted ones are skipped).
+pub async fn player_summaries(
+    db: &PgPool,
+    ids: &[Uuid],
+) -> sqlx::Result<Vec<(Uuid, String, String)>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    sqlx::query_as("SELECT id, full_name, playername FROM players WHERE id = ANY($1)")
+        .bind(ids)
+        .fetch_all(db)
+        .await
 }
 
 pub async fn set_status(db: &PgPool, id: Uuid, status: &str) -> sqlx::Result<BookingRow> {

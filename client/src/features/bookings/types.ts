@@ -12,6 +12,8 @@ export type Booking = {
   status: BookingStatus
   price: { amount: string; currency: string } | null
   player: { id: string; full_name: string; playername: string }
+  /** Other registered players in the group (num_people includes them). */
+  other_players: { id: string; full_name: string; playername: string }[]
   created_at: string
   updated_at: string
 }
@@ -20,12 +22,16 @@ export type CreateBookingInput = {
   player_id: string
   product_id: string
   event_id: string
+  /** Everyone in the group: the player, the other players and any unregistered guests. */
   num_people: number
+  other_player_ids?: string[]
 }
 
 export type UpdateBookingInput = {
   event_id: string
   num_people: number
+  /** Replaces the other players (omit to keep them). */
+  other_player_ids?: string[]
 }
 
 export type BookingListParams = {

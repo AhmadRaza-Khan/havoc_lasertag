@@ -15,6 +15,8 @@ pub struct BookingRow {
     pub start_time: DateTime<Utc>,
     pub end_time: DateTime<Utc>,
     pub num_people: i32,
+    /// Other registered players in the group (ids, in the order they were added).
+    pub other_players: Vec<Uuid>,
     pub status: String,
     pub price_amount: Option<String>,
     pub price_currency: Option<String>,

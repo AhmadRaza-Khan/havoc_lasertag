@@ -20,6 +20,8 @@ use axum::{
 
 use crate::state::AppState;
 
+pub use service::disconnect_player;
+
 /// Player-only REST routes; mounted behind `player_auth::require_player`.
 pub fn routes() -> Router<AppState> {
     Router::new()

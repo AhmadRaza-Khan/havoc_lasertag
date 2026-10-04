@@ -14,12 +14,9 @@ export function Sidebar({ items }: { items: NavItem[] }) {
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-brand">
-        <span className="sidebar-logo" aria-hidden="true">
-          H
-        </span>
-        <span>Havoc Admin</span>
-      </div>
+      <NavLink to="/" className="sidebar-brand" aria-label="Havoc admin home">
+        <img src="/logo.png" alt="Havoc Tactical Laser Tag" className="sidebar-logo" />
+      </NavLink>
 
       <nav className="sidebar-nav">
         {items.map(({ to, label, icon: Icon }) => (
