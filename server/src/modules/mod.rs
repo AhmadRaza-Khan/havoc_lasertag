@@ -10,6 +10,7 @@ pub mod offers;
 pub mod payments;
 pub mod player_auth;
 pub mod players;
+pub mod push;
 pub mod stats;
 pub mod users;
 
@@ -43,6 +44,7 @@ pub fn router(state: &AppState) -> Router<AppState> {
         .nest("/player/chats", chats::routes())
         .nest("/player/stats", stats::player_routes())
         .nest("/player/offers", offers::player_routes())
+        .nest("/player/push-tokens", push::player_routes())
         .route_layer(player_auth::require_player(state));
 
     public.merge(admin).merge(player)

@@ -250,6 +250,8 @@ typing, read receipts and online status are real-time over one WebSocket per app
 | POST | `/api/player/chats/conversations/{player_id}/messages` | `{body}` (1–2000 chars) — fallback when the socket is down; still pushed live |
 | POST | `/api/player/chats/conversations/{player_id}/read` | mark their messages read (sends them a read receipt) |
 | GET (WS) | `/api/player/chats/ws` | auth: `Authorization: Bearer <token>` header, or `?token=` for clients that can't set headers |
+| POST | `/api/player/push-tokens` | `{token, platform: ios\|android}` — Expo push token, after sign-in (204) |
+| DELETE | `/api/player/push-tokens` | `{token}` — on sign-out (204) |
 
 WebSocket frames are JSON with a `type`:
 
@@ -263,7 +265,11 @@ WebSocket frames are JSON with a `type`:
 App guidance: reconnect with backoff when the socket drops, then refetch conversations; treat
 `typing` as stopped if not refreshed within ~6 s (re-send `true` every ~3 s while typing). The
 server pings every 25 s and drops connections silent for 70 s, so presence stays accurate when
-phones lose signal. Presence is tracked in memory — fine for one server process; several
+phones lose signal. The app keeps the socket open only while it's in the foreground, so a
+message to a player who isn't connected is sent as a **push notification** (Expo Push Service:
+title = sender's playername, body = message preview, `data: {type: "chat_message", player_id}`,
+Android channel `messages`). Tokens Expo reports as unregistered are deleted; a password reset
+removes all of the player's tokens. Presence is tracked in memory — fine for one server process; several
 instances would need a shared bus (e.g. Postgres LISTEN/NOTIFY).
 
 Booking `status` is `pending` (awaiting staff approval — all current games have it enabled),
@@ -278,6 +284,8 @@ Booking `status` is `pending` (awaiting staff approval — all current games hav
   merchant console). Without them online payment is off. Emails: `SMTP2GO_API_KEY` and
   `MAIL_FROM` (a sender on a domain verified in SMTP2GO); without them emails are only logged.
   The Bookeo API key needs permission to read and write payments.
+- Push notifications work without configuration. If "enhanced push security" is enabled in the
+  Expo project, set `EXPO_ACCESS_TOKEN`. (`EXPO_PUSH_URL` overrides the endpoint, for tests.)
 - `client/.env.production`: `VITE_API_URL=https://api.<domain>`.
 - nginx must pass WebSocket upgrades for `/api/player/chats/ws`
   (`proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";`

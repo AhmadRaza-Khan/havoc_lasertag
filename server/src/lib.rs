@@ -13,7 +13,7 @@ use tracing_subscriber::EnvFilter;
 
 use crate::{
     config::Config,
-    integrations::{bookeo::BookeoClient, email::Mailer, qnb::QnbClient},
+    integrations::{bookeo::BookeoClient, email::Mailer, expo_push::ExpoPush, qnb::QnbClient},
     state::AppState,
 };
 
@@ -42,6 +42,10 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
             .transpose()?
             .map(Arc::new),
         mailer: Arc::new(Mailer::new(config.email.as_ref())?),
+        push: Arc::new(ExpoPush::new(
+            std::env::var("EXPO_PUSH_URL").ok(),
+            std::env::var("EXPO_ACCESS_TOKEN").ok(),
+        )?),
         chat: Arc::new(Default::default()),
         login_throttle: Arc::new(Default::default()),
         config: Arc::new(config),

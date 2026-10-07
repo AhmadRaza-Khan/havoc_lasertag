@@ -97,6 +97,14 @@ pub async fn send_message(
 
     let message = repository::insert_message(&state.db, from, to, &body).await?;
 
+    // The app keeps its socket open only while it's in the foreground: anyone not connected
+    // gets a push notification instead.
+    if !state.chat.is_online(to)
+        && let Some(sender) = repository::find_player(&state.db, from).await?
+    {
+        crate::modules::push::notify_chat_message(state, to, from, &sender.playername, &body);
+    }
+
     state.chat.send(
         to,
         &ServerEvent::Message {

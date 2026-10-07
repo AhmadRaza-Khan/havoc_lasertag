@@ -4,7 +4,7 @@ use sqlx::PgPool;
 
 use crate::{
     config::Config,
-    integrations::{bookeo::BookeoClient, email::Mailer, qnb::QnbClient},
+    integrations::{bookeo::BookeoClient, email::Mailer, expo_push::ExpoPush, qnb::QnbClient},
     modules::chats::hub::ChatHub,
     shared::login_throttle::LoginThrottle,
 };
@@ -17,6 +17,8 @@ pub struct AppState {
     /// `None` when QNB isn't configured: online payment is off.
     pub qnb: Option<Arc<QnbClient>>,
     pub mailer: Arc<Mailer>,
+    /// Expo push notifications (chat messages to players who aren't connected).
+    pub push: Arc<ExpoPush>,
     /// Live chat connections (in-memory, per process).
     pub chat: Arc<ChatHub>,
     /// Failed-login counters (in-memory, per process).

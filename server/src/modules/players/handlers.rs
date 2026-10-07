@@ -12,7 +12,7 @@ use super::{
 };
 use crate::{
     error::AppResult,
-    modules::{chats, stats},
+    modules::{chats, push, stats},
     shared::pagination::Paginated,
     state::AppState,
 };
@@ -48,6 +48,8 @@ pub async fn update(
     if password_reset {
         // Their tokens are now rejected; close live chat sockets too.
         chats::disconnect_player(&state, id);
+        // …and stop push notifications to their phones.
+        push::forget_player(&state, id).await;
     }
     Ok(Json(player))
 }
