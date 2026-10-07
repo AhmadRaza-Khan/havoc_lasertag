@@ -173,6 +173,7 @@ player bookings notify staff. Customers get Bookeo's emails when they have an em
 | DELETE | `/api/player/bookings/{id}/payment` | the customer closed the payment page unpaid: cancels a *pay now* booking at once (a last-second payment still counts); *pay later* bookings are unaffected |
 
 | GET | `/api/player/stats` | my all-time totals and leaderboard `position` (`null` until I've played) |
+| GET | `/api/player/stats/leaderboard` | general leaderboard any player can see: top 100 by all-time points, plus `me` (my row, even if lower) and `total_ranked`. Others appear by playername only (no full name/email/phone) |
 | GET | `/api/player/stats/games?page=&per_page=` | my game records, newest first — every field from my page |
 | GET | `/api/player/stats/games/{game_id}` | my record in one game (404 if I didn't play it) |
 

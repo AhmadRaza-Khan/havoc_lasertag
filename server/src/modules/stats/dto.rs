@@ -105,6 +105,63 @@ impl Standing {
     }
 }
 
+/// One row of the leaderboard players see: other players appear by playername only.
+#[derive(Debug, Clone, Serialize)]
+pub struct PublicStanding {
+    /// 1 = most points. Tied points share a position.
+    pub position: i64,
+    pub player: PublicPlayer,
+    pub games: i64,
+    pub points: i64,
+    /// Frags per deactivation (frags if never deactivated).
+    pub efficiency: f64,
+    pub frags: i64,
+    pub deactivated: i64,
+    /// Hits per shot, in percent.
+    pub accuracy: i64,
+    pub last_played_at: Option<DateTime<FixedOffset>>,
+    /// The signed-in player's own row.
+    pub is_me: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PublicPlayer {
+    pub id: Uuid,
+    pub playername: String,
+}
+
+impl PublicStanding {
+    /// `None` for players who haven't played yet (they aren't ranked).
+    pub fn from_row(r: StandingRow, tz: Tz, me: Uuid) -> Option<Self> {
+        Some(Self {
+            position: r.position?,
+            is_me: r.player_id == me,
+            player: PublicPlayer {
+                id: r.player_id,
+                playername: r.playername,
+            },
+            games: r.games,
+            points: r.points,
+            efficiency: efficiency(r.frags, r.deactivated),
+            frags: r.frags,
+            deactivated: r.deactivated,
+            accuracy: accuracy(r.hits, r.shots),
+            last_played_at: r.last_played_at.map(|t| local(t, tz)),
+        })
+    }
+}
+
+/// The leaderboard as players see it (mobile app).
+#[derive(Debug, Serialize)]
+pub struct Leaderboard {
+    /// The top ranked players, best first.
+    pub standings: Vec<PublicStanding>,
+    /// The signed-in player's row, even when it's below the top. `null` until they've played.
+    pub me: Option<PublicStanding>,
+    /// Everyone who has played at least one game.
+    pub total_ranked: i64,
+}
+
 /// The player's own standing (mobile app).
 #[derive(Debug, Serialize)]
 pub struct MyStats {
@@ -228,5 +285,47 @@ mod tests {
         assert_eq!(accuracy(1, 2), 50); // Zef
         assert_eq!(accuracy(6, 15), 40); // Wolf
         assert_eq!(accuracy(0, 0), 0); // Aaron
+    }
+
+    fn row(position: Option<i64>, id: u128) -> StandingRow {
+        StandingRow {
+            position,
+            player_id: Uuid::from_u128(id),
+            full_name: "Real Name".into(),
+            playername: "wolf".into(),
+            games: 3,
+            points: 120,
+            frags: 6,
+            deactivated: 3,
+            shots: 20,
+            hits: 5,
+            last_played_at: None,
+        }
+    }
+
+    #[test]
+    fn public_standing_hides_private_details() {
+        let me = Uuid::from_u128(7);
+        let tz: Tz = "Asia/Qatar".parse().unwrap();
+        assert!(
+            PublicStanding::from_row(row(None, 1), tz, me).is_none(),
+            "not played yet: not ranked"
+        );
+
+        let other = PublicStanding::from_row(row(Some(2), 1), tz, me).unwrap();
+        assert!(!other.is_me);
+        assert_eq!((other.efficiency, other.accuracy), (2.0, 25));
+        let json = serde_json::to_string(&other).unwrap();
+        assert!(json.contains("\"playername\":\"wolf\""));
+        assert!(
+            !json.contains("Real Name"),
+            "full names stay private: {json}"
+        );
+
+        assert!(
+            PublicStanding::from_row(row(Some(1), 7), tz, me)
+                .unwrap()
+                .is_me
+        );
     }
 }

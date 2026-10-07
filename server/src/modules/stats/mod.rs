@@ -40,6 +40,7 @@ pub fn admin_routes() -> Router<AppState> {
 pub fn player_routes() -> Router<AppState> {
     Router::new()
         .route("/", get(player_handlers::summary))
+        .route("/leaderboard", get(player_handlers::leaderboard))
         .route("/games", get(player_handlers::games))
         .route("/games/{game_id}", get(player_handlers::game))
 }

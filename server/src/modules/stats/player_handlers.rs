@@ -7,7 +7,7 @@ use axum::{
 use uuid::Uuid;
 
 use super::{
-    dto::{GameRecord, MyStats, PageQuery, Standing},
+    dto::{GameRecord, Leaderboard, MyStats, PageQuery, PublicStanding, Standing},
     repository, service,
 };
 use crate::{
@@ -27,6 +27,30 @@ pub async fn summary(
     Ok(Json(MyStats {
         standing: Standing::from_row(standing, state.config.bookeo.timezone),
         total_players,
+    }))
+}
+
+/// Rows shown in the app's leaderboard.
+const LEADERBOARD_SIZE: usize = 100;
+
+/// The general leaderboard: every player who has played, ranked by all-time points.
+/// Any signed-in player can see it; others appear by playername only.
+pub async fn leaderboard(
+    State(state): State<AppState>,
+    player: AuthPlayer,
+) -> AppResult<Json<Leaderboard>> {
+    let tz = state.config.bookeo.timezone;
+    let ranked: Vec<PublicStanding> = service::leaderboard(&state)
+        .await?
+        .into_iter()
+        .filter_map(|r| PublicStanding::from_row(r, tz, player.id))
+        .collect();
+    let total_ranked = ranked.len() as i64;
+    let me = ranked.iter().find(|s| s.is_me).cloned();
+    Ok(Json(Leaderboard {
+        standings: ranked.into_iter().take(LEADERBOARD_SIZE).collect(),
+        me,
+        total_ranked,
     }))
 }
 
