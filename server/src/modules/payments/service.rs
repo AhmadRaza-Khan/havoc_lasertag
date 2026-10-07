@@ -74,8 +74,8 @@ fn settings_response(state: &AppState, settings: PaymentSettings) -> SettingsRes
 // Booking lifecycle
 // ---------------------------------------------------------------------------
 
-/// After a booking is made in the app: decides whether and by when it must be paid.
-/// In `pay_later` mode a link is created up front and emailed to the player.
+/// After a booking is made in the app: decides whether and by when it must be paid, and
+/// emails the player the deadline (with a pay link in `pay_later` mode).
 pub async fn on_booking_created(state: &AppState, booking_id: Uuid) -> AppResult<()> {
     let Some(qnb) = &state.qnb else { return Ok(()) };
     let Some(booking) = repository::booking(&state.db, booking_id, None).await? else {
@@ -95,24 +95,26 @@ pub async fn on_booking_created(state: &AppState, booking_id: Uuid) -> AppResult
     repository::require_payment(&state.db, booking_id, settings.mode, due_at).await?;
     tracing::info!(%booking_id, mode = settings.mode.as_str(), %due_at, "booking awaits payment");
 
-    if settings.mode == PaymentMode::PayLater {
-        let booking = PayableBooking {
-            payment_status: "unpaid".into(),
-            payment_mode: Some(settings.mode),
-            payment_due_at: Some(due_at),
-            ..booking
-        };
-        // Without a link the email still asks them to pay in the app.
-        let link = new_link(state, qnb, &booking, false)
+    let booking = PayableBooking {
+        payment_status: "unpaid".into(),
+        payment_mode: Some(settings.mode),
+        payment_due_at: Some(due_at),
+        ..booking
+    };
+    // "Pay later": a link up front, so the email can carry it. "Pay now": the app opens the
+    // payment page itself; the email just states the deadline.
+    let link = match settings.mode {
+        PaymentMode::PayLater => new_link(state, qnb, &booking, false)
             .await
             .inspect_err(|e| tracing::error!(%booking_id, "could not create pay link: {e}"))
             .ok()
-            .and_then(|p| p.pay_url);
-        notify(state, &booking, |to, name| {
-            emails::payment_requested(state, to, name, &booking, link.as_deref())
-        })
-        .await;
-    }
+            .and_then(|p| p.pay_url),
+        PaymentMode::PayNow => None,
+    };
+    notify(state, &booking, |to, name| {
+        emails::payment_requested(state, to, name, &booking, link.as_deref())
+    })
+    .await;
     Ok(())
 }
 

@@ -19,7 +19,7 @@ pub fn payment_requested(
     let amount = amount(b);
     let action = match pay_url {
         Some(_) => "Pay securely with the link below or from My bookings in the Havoc app.",
-        None => "Open My bookings in the Havoc app to pay.",
+        None => "Complete the payment in the Havoc app.",
     };
     let lines = [
         format!("Hi {name},"),

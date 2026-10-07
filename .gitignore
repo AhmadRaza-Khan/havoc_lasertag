@@ -23,3 +23,6 @@ QAT-QNB-01-IP_eCommerce_API_Specification_r6.1.pdf
 .vscode/*
 !.vscode/extensions.json
 .DS_Store
+
+# Mobile app (Expo): kept local, not pushed
+/mobile/

@@ -37,9 +37,9 @@ pub enum Actor {
 impl Actor {
     fn options(self, customer_has_email: bool) -> RequestOptions {
         match self {
-            // Staff should hear about bookings made in the app.
+            // Staff see app bookings in the admin panel; no Bookeo staff emails.
             Actor::Player => RequestOptions {
-                notify_users: true,
+                notify_users: false,
                 notify_customer: customer_has_email,
                 backend: false,
             },
@@ -49,9 +49,9 @@ impl Actor {
                 notify_customer: customer_has_email,
                 backend: true,
             },
-            // Staff hear about it; the customer gets our own email explaining why.
+            // The customer gets our own email explaining why.
             Actor::System => RequestOptions {
-                notify_users: true,
+                notify_users: false,
                 notify_customer: false,
                 backend: true,
             },
@@ -87,6 +87,11 @@ pub async fn create(
     check_other_players(state, player_id, &req.other_player_ids).await?;
     let customer_id = ensure_bookeo_customer(state, player_id).await?;
 
+    // With online payment on, our emails (payment due, receipt) replace Bookeo's confirmation:
+    // an app booking isn't final until it's paid.
+    let bookeo_emails =
+        player.email.is_some() && !(matches!(actor, Actor::Player) && state.qnb.is_some());
+
     let id = Uuid::new_v4();
     let booking = state
         .bookeo
@@ -99,7 +104,7 @@ pub async fn create(
                 participants,
                 source: actor.source(),
             },
-            actor.options(player.email.is_some()),
+            actor.options(bookeo_emails),
         )
         .await?;
     tracing::info!(%player_id, ?actor, booking_number = %booking.booking_number, "bookeo booking created");
@@ -499,8 +504,10 @@ mod tests {
     #[test]
     fn actor_options() {
         let p = Actor::Player.options(true);
-        assert!(p.notify_users && p.notify_customer && !p.backend);
+        assert!(!p.notify_users && p.notify_customer && !p.backend);
         let a = Actor::Admin.options(false);
         assert!(!a.notify_users && !a.notify_customer && a.backend);
+        let s = Actor::System.options(true);
+        assert!(!s.notify_users && !s.notify_customer && s.backend);
     }
 }
