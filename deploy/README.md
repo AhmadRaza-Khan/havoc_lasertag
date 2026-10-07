@@ -198,3 +198,4 @@ sudo systemctl status havoc-api
 sudo journalctl -u havoc-api -f
 ls -l /opt/havoc/current /var/www/havoc/current   # live release
 ```
+
