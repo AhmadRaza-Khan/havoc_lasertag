@@ -20,6 +20,16 @@ pub fn player_routes() -> Router<AppState> {
             get(player_handlers::list).post(player_handlers::create),
         )
         .route("/{id}", get(player_handlers::get))
+        .merge(crate::modules::payments::player_booking_routes())
+}
+
+/// Cancels an app booking that wasn't paid in time (frees its seats in Bookeo).
+pub async fn cancel_for_nonpayment(
+    state: &AppState,
+    id: uuid::Uuid,
+) -> crate::error::AppResult<()> {
+    service::cancel(state, id, service::Actor::System).await?;
+    Ok(())
 }
 
 /// Admin panel routes; mounted behind `auth::require_auth`.

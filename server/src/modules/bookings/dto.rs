@@ -182,6 +182,10 @@ pub struct BookingResponse {
     /// `confirmed`, `pending` (awaiting staff approval) or `canceled`.
     pub status: String,
     pub price: Option<BookingPrice>,
+    /// `not_required` (nothing to pay online), `unpaid` or `paid`.
+    pub payment_status: String,
+    /// Unpaid bookings are canceled after this. Business timezone.
+    pub payment_due_at: Option<DateTime<FixedOffset>>,
     /// Included in admin responses only.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub player: Option<PlayerSummary>,
@@ -221,6 +225,10 @@ impl BookingResponse {
             num_people: row.num_people,
             status: row.status,
             price,
+            payment_status: row.payment_status,
+            payment_due_at: row
+                .payment_due_at
+                .map(|d| d.with_timezone(&tz).fixed_offset()),
             player: None,
             other_players: Vec::new(),
             created_at: row.created_at,

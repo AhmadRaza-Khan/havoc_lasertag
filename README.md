@@ -47,7 +47,9 @@ error.rs         AppError → JSON { "error": "..." } responses
 state.rs         AppState shared by handlers
 shared/          cross-module helpers: validation, password hashing, JWT, pagination
 integrations/
-  bookeo/        typed Bookeo API client (products cache, slots, customers, bookings)
+  bookeo/        typed Bookeo API client (products cache, slots, customers, bookings, payments)
+  qnb/           QNB payment gateway client (Pay by Link, transaction inquiry, link cancel)
+  email.rs       SMTP2GO mailer
 modules/
   mod.rs         mounts every module's routes under /api (public / admin-only / player-only groups)
   <feature>/
@@ -146,6 +148,8 @@ player bookings notify staff. Customers get Bookeo's emails when they have an em
 | POST | `/api/stats/imports` | admin | multipart field `file`: a game report PDF → 202, processed in the background |
 | GET | `/api/stats/imports/{id}` | admin | poll until `status` is `completed` / `failed` (with players matched, unmatched names, warnings) |
 | GET | `/api/stats/imports` | admin | last 10 uploads |
+| GET | `/api/settings/payments` | admin | `{mode: pay_now\|pay_later, pay_later_minutes, pay_now_minutes, online_payment_enabled}` |
+| PUT | `/api/settings/payments` | admin | `{mode, pay_later_minutes}` (15 min – 30 days) |
 | GET | `/api/stats/leaderboard` | admin | general report: every player's all-time totals, ranked by points |
 | GET | `/api/offers?search=&page=&per_page=` | admin | paginated, newest first; search matches title or description |
 | POST | `/api/offers` | admin | `{title, description, is_active?, starts_on?, ends_on?}` — dates `YYYY-MM-DD`, inclusive; `is_active` defaults to `true` |
@@ -164,12 +168,49 @@ player bookings notify staff. Customers get Bookeo's emails when they have an em
 | POST | `/api/player/bookings` | `{product_id, event_id, num_people}` → booking (201). Bookeo rejections (slot full, …) → 422 |
 | GET | `/api/player/bookings?when=upcoming\|past&page=&per_page=` | the player's own bookings |
 | GET | `/api/player/bookings/{id}` | one booking, status refreshed from Bookeo |
+| POST | `/api/player/bookings/{id}/payment?lang=ar` | QNB payment page for the booking → `{status, pay_url, amount, currency, due_at, last_failure, …}`. Reuses the open link; a new one after a failed attempt. 409 if nothing to pay / canceled / time to pay passed |
+| GET | `/api/player/bookings/{id}/payment` | payment state, confirmed with QNB — poll while the payment page is open |
+| DELETE | `/api/player/bookings/{id}/payment` | the customer closed the payment page unpaid: cancels a *pay now* booking at once (a last-second payment still counts); *pay later* bookings are unaffected |
 
 | GET | `/api/player/stats` | my all-time totals and leaderboard `position` (`null` until I've played) |
 | GET | `/api/player/stats/games?page=&per_page=` | my game records, newest first — every field from my page |
 | GET | `/api/player/stats/games/{game_id}` | my record in one game (404 if I didn't play it) |
 
 | GET | `/api/player/offers` | promotions live today: active and within their dates (business timezone), newest first. Plain array of `{id, title, description, starts_on, ends_on, …}` |
+
+### Payments (QNB, mobile app)
+
+Bookings made in the app are paid by card on QNB's hosted payment page (spec 5.23 "Pay by Link"),
+opened in a WebView. Card details never reach the app or this server. Booking responses carry
+`payment_status` (`not_required` | `unpaid` | `paid`) and `payment_due_at`.
+
+1. Create the booking (`POST /api/player/bookings`). If `payment_status` is `unpaid`:
+2. `POST /api/player/bookings/{id}/payment` → open `pay_url` in a WebView.
+3. While it's open, poll `GET …/payment` every 3–5 s. Close the WebView when `status` is `paid`
+   (show success). If `last_failure` is set, show it and offer "Try again" (repeat step 2).
+   Don't read the WebView's URL or page to decide the outcome — QNB has no return URL for
+   pay links, and only the server's answer counts.
+4. If the customer closes the payment page without paying, call `DELETE …/payment`. In *pay
+   now* mode that cancels the booking right away; in *pay later* mode it stays `unpaid` until
+   `payment_due_at` and "Pay" on the booking repeats step 2.
+
+When QNB accepts a payment the server marks the booking `paid`, records the payment in Bookeo
+(`creditCard`, comment `QNB transaction <ipgTxnId>`) and emails a receipt. A background job
+(every minute) catches payments finished with the app closed, retries Bookeo if it was down, and
+cancels bookings not paid by `payment_due_at` (links closed first; a last-second payment wins).
+
+The seat is always booked before payment, so a payment can never arrive for seats that are gone
+(no refunds): before an unpaid booking is canceled, its QNB link is closed and checked one last
+time.
+
+Admins choose in **Settings**: *Pay now* (default; canceled as soon as the customer leaves the
+payment page unpaid, or after 10 min if the app never reports back) or *Pay later*
+(a set time, 15 min – 30 days; the customer is emailed a pay link). The deadline is never later
+than the game's start. Staff-made bookings have nothing to pay online. Pending-approval bookings
+are paid right away; if staff deny one, refund it from the QNB merchant console.
+
+Emails (SMTP2GO): payment due (pay later, with link), payment received, canceled for non-payment.
+Customers without an email address get none.
 
 ### Game statistics (PDF import)
 
@@ -231,6 +272,11 @@ Booking `status` is `pending` (awaiting staff approval — all current games hav
 
 - `server/.env`: `COOKIE_SECURE=true`, `CORS_ORIGINS=https://<domain>`, `BIND_ADDR=127.0.0.1:8080` behind nginx,
   plus `BOOKEO_API_KEY`, `BOOKEO_SECRET_KEY`, `BOOKEO_TIMEZONE` (see `server/.env.example`).
+- Payments: `QNB_BASE_URL` (production URL from QNB), `QNB_USER_ID`, `QNB_MERCHANT_ID`,
+  `QNB_MERCHANT_PWD`, `QNB_MERCHANT_KEY` (API password/key: "Merchant API Details" in the QNB
+  merchant console). Without them online payment is off. Emails: `SMTP2GO_API_KEY` and
+  `MAIL_FROM` (a sender on a domain verified in SMTP2GO); without them emails are only logged.
+  The Bookeo API key needs permission to read and write payments.
 - `client/.env.production`: `VITE_API_URL=https://api.<domain>`.
 - nginx must pass WebSocket upgrades for `/api/player/chats/ws`
   (`proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";`

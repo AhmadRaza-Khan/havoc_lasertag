@@ -16,6 +16,8 @@ node_modules/
 client/dist/
 *.log
 
+QAT-QNB-01-IP_eCommerce_API_Specification_r6.1.pdf
+
 # Editors / OS
 .idea/
 .vscode/*

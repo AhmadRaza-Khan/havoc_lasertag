@@ -2,7 +2,7 @@ import { Link } from 'react-router'
 import { Ban, Pencil } from 'lucide-react'
 import { formatDay, formatMoney, formatTimeRange } from '@/lib/format'
 import type { Booking } from '../types'
-import { StatusBadge } from './StatusBadge'
+import { PaymentBadge, StatusBadge } from './StatusBadge'
 
 type BookingsTableProps = {
   bookings: Booking[]
@@ -61,7 +61,12 @@ export function BookingsTable({ bookings, onCancel }: BookingsTableProps) {
                 <td>
                   <StatusBadge status={b.status} />
                 </td>
-                <td>{b.price ? formatMoney(b.price.amount, b.price.currency) : '—'}</td>
+                <td>
+                  <div className="stack-cell price-cell">
+                    <span>{b.price ? formatMoney(b.price.amount, b.price.currency) : '—'}</span>
+                    <PaymentBadge booking={b} />
+                  </div>
+                </td>
                 <td className="table-actions">
                   {canceled ? (
                     <span className="icon-btn-placeholder" />

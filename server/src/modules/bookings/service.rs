@@ -30,6 +30,8 @@ pub enum Actor {
     Player,
     /// Staff in the admin panel.
     Admin,
+    /// The server itself, e.g. canceling a booking that wasn't paid in time.
+    System,
 }
 
 impl Actor {
@@ -47,13 +49,19 @@ impl Actor {
                 notify_customer: customer_has_email,
                 backend: true,
             },
+            // Staff hear about it; the customer gets our own email explaining why.
+            Actor::System => RequestOptions {
+                notify_users: true,
+                notify_customer: false,
+                backend: true,
+            },
         }
     }
 
     fn source(self) -> &'static str {
         match self {
             Actor::Player => "Havoc app",
-            Actor::Admin => "Havoc admin",
+            Actor::Admin | Actor::System => "Havoc admin",
         }
     }
 }
@@ -128,6 +136,13 @@ pub async fn create(
         );
     })?;
 
+    if matches!(actor, Actor::Player) {
+        // Online payment applies to app bookings; staff collect for their own at the venue.
+        if let Err(e) = crate::modules::payments::on_booking_created(state, row.id).await {
+            tracing::error!(booking_id = %row.id, "could not set up payment: {e}");
+        }
+        return find(state, row.id, None).await;
+    }
     Ok(row)
 }
 

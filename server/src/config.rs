@@ -11,6 +11,30 @@ pub struct Config {
     pub cors_origins: Vec<String>,
     pub cookie_secure: bool,
     pub bookeo: BookeoConfig,
+    /// QNB payment gateway. `None` turns online payment off: app bookings have nothing to pay.
+    pub qnb: Option<QnbConfig>,
+    /// SMTP2GO email. `None` logs emails instead of sending them.
+    pub email: Option<EmailConfig>,
+}
+
+#[derive(Clone, Debug)]
+pub struct QnbConfig {
+    /// e.g. https://ecommerce-uat.qnb.com (test) — paths like /ipg/rest/v1/... are appended.
+    pub base_url: String,
+    pub user_id: String,
+    pub merchant_id: String,
+    /// API password ("Merchant API Details" in the QNB merchant console).
+    pub merchant_pwd: String,
+    /// API key ("Merchant API Details" in the QNB merchant console).
+    pub merchant_key: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct EmailConfig {
+    pub api_key: String,
+    /// Sender, e.g. `Havoc Laser Tag <no-reply@havoc.qa>`; the domain must be verified in SMTP2GO.
+    pub from: String,
+    pub base_url: String,
 }
 
 #[derive(Clone, Debug)]
@@ -59,8 +83,47 @@ impl Config {
                     .parse()
                     .map_err(|_| "BOOKEO_TIMEZONE must be an IANA timezone, e.g. Asia/Qatar")?,
             },
+            qnb: qnb_config()?,
+            email: email_config()?,
         })
     }
+}
+
+/// All of the QNB variables, or none of them.
+fn qnb_config() -> Result<Option<QnbConfig>, String> {
+    let keys = [
+        "QNB_USER_ID",
+        "QNB_MERCHANT_ID",
+        "QNB_MERCHANT_PWD",
+        "QNB_MERCHANT_KEY",
+    ];
+    if keys.iter().all(|k| env::var(k).is_err()) {
+        return Ok(None);
+    }
+    Ok(Some(QnbConfig {
+        base_url: env::var("QNB_BASE_URL")
+            .unwrap_or_else(|_| "https://ecommerce-uat.qnb.com".into())
+            .trim_end_matches('/')
+            .to_string(),
+        user_id: required(keys[0])?,
+        merchant_id: required(keys[1])?,
+        merchant_pwd: required(keys[2])?,
+        merchant_key: required(keys[3])?,
+    }))
+}
+
+fn email_config() -> Result<Option<EmailConfig>, String> {
+    let Ok(api_key) = env::var("SMTP2GO_API_KEY") else {
+        return Ok(None);
+    };
+    Ok(Some(EmailConfig {
+        api_key,
+        from: required("MAIL_FROM")?,
+        base_url: env::var("SMTP2GO_BASE_URL")
+            .unwrap_or_else(|_| "https://api.smtp2go.com/v3".into())
+            .trim_end_matches('/')
+            .to_string(),
+    }))
 }
 
 fn required(key: &str) -> Result<String, String> {

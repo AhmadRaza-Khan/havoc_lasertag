@@ -1,5 +1,8 @@
 export type BookingStatus = 'confirmed' | 'pending' | 'canceled'
 
+/** Online payment (app bookings). `not_required`: nothing to pay online, e.g. staff bookings. */
+export type PaymentStatus = 'not_required' | 'unpaid' | 'paid'
+
 export type Booking = {
   id: string
   booking_number: string
@@ -11,6 +14,9 @@ export type Booking = {
   num_people: number
   status: BookingStatus
   price: { amount: string; currency: string } | null
+  payment_status: PaymentStatus
+  /** Unpaid bookings are canceled automatically after this. */
+  payment_due_at: string | null
   player: { id: string; full_name: string; playername: string }
   /** Other registered players in the group (num_people includes them). */
   other_players: { id: string; full_name: string; playername: string }[]

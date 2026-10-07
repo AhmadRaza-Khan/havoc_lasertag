@@ -8,7 +8,9 @@ use reqwest::{Method, RequestBuilder, Response, StatusCode, header::LOCATION};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::sync::RwLock;
 
-use super::types::{Booking, Customer, NewBooking, NewCustomer, Page, Product, Slot};
+use super::types::{
+    Booking, Customer, NewBooking, NewCustomer, NewPayment, Page, Payment, Product, Slot,
+};
 use crate::{config::BookeoConfig, error::AppError};
 
 /// Bookeo recommends caching product settings for 10-15 minutes.
@@ -188,6 +190,30 @@ impl BookeoClient {
             .send(self.request(Method::GET, &format!("/bookings/{booking_number}")))
             .await?;
         json_body(res).await
+    }
+
+    /// Payments recorded on a booking (those this API key may read).
+    pub async fn booking_payments(&self, booking_number: &str) -> BookeoResult<Vec<Payment>> {
+        self.get_all_pages(&format!("/bookings/{booking_number}/payments"), &[])
+            .await
+    }
+
+    /// Records a payment received outside Bookeo; Bookeo updates the booking's amount paid.
+    pub async fn add_payment(
+        &self,
+        booking_number: &str,
+        payment: &NewPayment,
+    ) -> BookeoResult<Payment> {
+        let res = self
+            .send(
+                self.request(
+                    Method::POST,
+                    &format!("/bookings/{booking_number}/payments"),
+                )
+                .json(payment),
+            )
+            .await?;
+        self.created_resource(res).await
     }
 
     // --- internals ---

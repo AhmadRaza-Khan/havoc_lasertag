@@ -7,6 +7,7 @@ pub mod chats;
 pub mod games;
 pub mod health;
 pub mod offers;
+pub mod payments;
 pub mod player_auth;
 pub mod players;
 pub mod stats;
@@ -32,6 +33,7 @@ pub fn router(state: &AppState) -> Router<AppState> {
         .nest("/bookings", bookings::admin_routes())
         .nest("/stats", stats::admin_routes())
         .nest("/offers", offers::admin_routes())
+        .nest("/settings", payments::admin_routes())
         .route_layer(auth::require_auth(state));
 
     // Mobile app: everything here requires a player token.

@@ -11,7 +11,11 @@ use std::sync::Arc;
 
 use tracing_subscriber::EnvFilter;
 
-use crate::{config::Config, integrations::bookeo::BookeoClient, state::AppState};
+use crate::{
+    config::Config,
+    integrations::{bookeo::BookeoClient, email::Mailer, qnb::QnbClient},
+    state::AppState,
+};
 
 pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
@@ -31,12 +35,27 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState {
         db,
         bookeo: Arc::new(BookeoClient::new(&config.bookeo)?),
+        qnb: config
+            .qnb
+            .as_ref()
+            .map(QnbClient::new)
+            .transpose()?
+            .map(Arc::new),
+        mailer: Arc::new(Mailer::new(config.email.as_ref())?),
         chat: Arc::new(Default::default()),
         login_throttle: Arc::new(Default::default()),
         config: Arc::new(config),
     };
     // Imports interrupted by a restart can't resume: mark them failed, drop their temp files.
     modules::stats::recover(&state).await?;
+    if state.qnb.is_none() {
+        tracing::warn!("QNB is not configured: online payment is off");
+    }
+    if state.config.email.is_none() {
+        tracing::warn!("SMTP2GO is not configured: emails are logged, not sent");
+    }
+    // Confirms payments, records them in Bookeo and cancels overdue unpaid bookings.
+    tokio::spawn(modules::payments::worker::run(state.clone()));
     let app = app::build(state)?;
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;

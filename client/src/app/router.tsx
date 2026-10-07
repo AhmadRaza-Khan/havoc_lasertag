@@ -5,6 +5,7 @@ import { BookingFormPage, BookingsPage } from '@/features/bookings'
 import { DashboardPage } from '@/features/dashboard'
 import { OffersPage } from '@/features/offers'
 import { PlayersPage } from '@/features/players'
+import { SettingsPage } from '@/features/settings'
 
 export function AppRoutes() {
   return (
@@ -22,6 +23,7 @@ export function AppRoutes() {
           <Route path="/bookings/new" element={<BookingFormPage />} />
           <Route path="/bookings/:id/edit" element={<BookingFormPage />} />
           <Route path="/offers" element={<OffersPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Route>
 

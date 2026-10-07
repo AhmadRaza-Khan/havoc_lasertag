@@ -7,7 +7,7 @@ use super::model::{BookingRow, BookingWithPlayer};
 /// Every query aliases `bookings` as `b` so the same column list works with joins.
 const COLUMNS: &str = "b.id, b.player_id, b.bookeo_booking_number, b.product_id, b.product_name, \
     b.event_id, b.start_time, b.end_time, b.num_people, b.other_players, b.status, b.price_amount, b.price_currency, \
-    b.created_at, b.updated_at";
+    b.payment_status, b.payment_due_at, b.created_at, b.updated_at";
 
 const PLAYER_COLUMNS: &str = "p.full_name AS player_full_name, p.playername AS player_playername";
 

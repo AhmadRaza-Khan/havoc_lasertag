@@ -127,6 +127,27 @@ pub struct Price {
     pub total_gross: Option<Money>,
 }
 
+/// A payment recorded on a booking.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewPayment {
+    pub received_time: String,
+    /// Shown to the customer, e.g. "Online payment".
+    pub reason: String,
+    /// Not shown to customers; we put the gateway's transaction id here.
+    pub comment: String,
+    pub amount: Money,
+    /// One of Bookeo's methods: "creditCard", "cash", "other", ...
+    pub payment_method: &'static str,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Payment {
+    pub id: String,
+    pub comment: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct Customer {
     pub id: String,

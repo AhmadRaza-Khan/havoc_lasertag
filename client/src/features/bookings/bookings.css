@@ -254,3 +254,21 @@
   background: var(--danger-bg);
   color: var(--danger);
 }
+
+/* Payment state under the price */
+
+.price-cell {
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.badge-paid {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.badge-unpaid {
+  background: var(--warning-bg);
+  color: var(--warning);
+  white-space: nowrap;
+}

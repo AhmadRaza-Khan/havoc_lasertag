@@ -20,6 +20,10 @@ pub struct BookingRow {
     pub status: String,
     pub price_amount: Option<String>,
     pub price_currency: Option<String>,
+    /// `not_required`, `unpaid` or `paid` (online payment of app bookings).
+    pub payment_status: String,
+    /// Unpaid bookings are canceled after this.
+    pub payment_due_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
