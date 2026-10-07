@@ -8,5 +8,5 @@ export const authApi = {
       body: JSON.stringify({ username, password }),
     }),
   logout: () => apiRequest<void>('/auth/logout', { method: 'POST' }),
-  me: () => apiRequest<User>('/auth/me'),
+  me: () => apiRequest<User>('/auth/me')
 }
