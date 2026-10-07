@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: ${{ vars.WEB_URL || 'https://example.com' }}
+      url: ${{ vars.WEB_URL || 'https://havoc-admin.cyberboost.io' }}
     steps:
       - uses: actions/checkout@v4
         with:

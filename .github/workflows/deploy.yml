@@ -86,7 +86,7 @@ jobs:
       - name: Build
         env:
           # Overrides client/.env.production when the repo variable is set.
-          VITE_API_URL: ${{ vars.API_URL || 'https://backend.example.com' }}
+          VITE_API_URL: ${{ vars.API_URL || 'https://havoc-api.cyberboost.io' }}
           VITE_BUSINESS_TIMEZONE: ${{ vars.BUSINESS_TIMEZONE || 'Asia/Qatar' }}
         run: npm run build
 
@@ -104,7 +104,7 @@ jobs:
     # Configure protection rules (e.g. required reviewers) under Settings → Environments.
     environment:
       name: production
-      url: ${{ vars.WEB_URL || 'https://example.com' }}
+      url: ${{ vars.WEB_URL || 'https://havoc-admin.cyberboost.io' }}
     steps:
       # Only for deploy/scripts/activate.sh, which is piped over SSH (not copied to the VPS).
       - uses: actions/checkout@v4
@@ -167,7 +167,7 @@ jobs:
         run: |
           {
             echo "### Deployed \`$RELEASE\`"
-            echo "- Web: ${{ vars.WEB_URL || 'https://example.com' }}"
-            echo "- API: ${{ vars.API_URL || 'https://backend.example.com' }}"
+            echo "- Web: ${{ vars.WEB_URL || 'https://havoc-admin.cyberboost.io' }}"
+            echo "- API: ${{ vars.API_URL || 'https://havoc-api.cyberboost.io' }}"
             echo "Roll back with the **Rollback** workflow."
           } >> "$GITHUB_STEP_SUMMARY"

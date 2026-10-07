@@ -4,8 +4,8 @@ Both apps run on one VPS behind nginx:
 
 | Domain | Serves | From |
 |---|---|---|
-| `example.com` (www redirects here) | React admin panel (static files) | `/var/www/havoc/current` |
-| `backend.example.com` | Rust API + chat WebSocket | `127.0.0.1:8080` (systemd `havoc-api`) |
+| `havoc-admin.cyberboost.io` | React admin panel (static files) | `/var/www/havoc/current` |
+| `havoc-api.cyberboost.io` | Rust API + chat WebSocket | `127.0.0.1:8080` (systemd `havoc-api`) |
 
 **Everything is built on GitHub.** The VPS only receives the compiled API binary (static, no
 Rust toolchain or system libraries needed) and the React `dist/` files — no source code.
@@ -21,8 +21,8 @@ If the API fails its health check, the previous API release is restored automati
 web app is not switched. The last 5 releases are kept for the **Rollback** workflow.
 Database migrations are inside the binary and run when it starts.
 
-Replace `example.com` / `backend.example.com` everywhere below (and in `deploy/nginx/*.conf`)
-with the real domains.
+Production: VPS `13.140.177.43` (Ubuntu 24.04) with the domains above. To use other domains,
+change them in `deploy/nginx/*.conf`, `client/.env.production` and the workflow defaults.
 
 ---
 
@@ -42,8 +42,8 @@ with the real domains.
 
 | Variable | Default | Used for |
 |---|---|---|
-| `API_URL` | `https://backend.example.com` | API address baked into the web app |
-| `WEB_URL` | `https://example.com` | Link shown on the deployment |
+| `API_URL` | `https://havoc-api.cyberboost.io` | API address baked into the web app |
+| `WEB_URL` | `https://havoc-admin.cyberboost.io` | Link shown on the deployment |
 | `BUSINESS_TIMEZONE` | `Asia/Qatar` | Timezone the web app shows bookings in |
 | `API_ROOT` | `/opt/havoc` | API releases folder on the VPS |
 | `WEB_ROOT` | `/var/www/havoc` | Web releases folder on the VPS |
@@ -67,8 +67,7 @@ ssh-keyscan -p 22 <VPS_HOST>   # → paste into the VPS_KNOWN_HOSTS secret
 
 ### 2.1 Packages and DNS
 
-Point `A` (and `AAAA` if you use IPv6) records for `example.com`, `www.example.com` and
-`backend.example.com` at the VPS. Then:
+Point `A` (and `AAAA` if you use IPv6) records for `havoc-admin.cyberboost.io` and `havoc-api.cyberboost.io` at the VPS. Then:
 
 ```bash
 sudo apt update
@@ -122,7 +121,7 @@ DATABASE_URL=postgres://havoc:CHANGE-ME-STRONG-PASSWORD@localhost:5432/havoc
 BIND_ADDR=127.0.0.1:8080
 JWT_SECRET=REPLACE-WITH-OUTPUT-OF-openssl-rand-base64-48
 JWT_TTL_HOURS=168
-CORS_ORIGINS=https://example.com
+CORS_ORIGINS=https://havoc-admin.cyberboost.io
 COOKIE_SECURE=true
 BOOKEO_API_KEY=...
 BOOKEO_SECRET_KEY=...
@@ -146,18 +145,18 @@ sudo systemctl enable havoc-api    # it starts on the first deploy
 
 ### 2.6 HTTPS and nginx
 
-One certificate covers all three names:
+One certificate (named `havoc`) covers both names:
 
 ```bash
-sudo certbot certonly --nginx -d example.com -d www.example.com -d backend.example.com
-sudo cp deploy/nginx/example.com.conf deploy/nginx/backend.example.com.conf /etc/nginx/sites-available/
-sudo ln -s /etc/nginx/sites-available/example.com.conf /etc/nginx/sites-enabled/
-sudo ln -s /etc/nginx/sites-available/backend.example.com.conf /etc/nginx/sites-enabled/
+sudo certbot certonly --nginx --cert-name havoc -d havoc-admin.cyberboost.io -d havoc-api.cyberboost.io
+sudo cp deploy/nginx/havoc-admin.cyberboost.io.conf deploy/nginx/havoc-api.cyberboost.io.conf /etc/nginx/sites-available/
+sudo ln -s /etc/nginx/sites-available/havoc-admin.cyberboost.io.conf /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/havoc-api.cyberboost.io.conf /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Certbot renews automatically. Until the first deploy, `example.com` answers 404 — expected.
+Certbot renews automatically. Until the first deploy, `havoc-admin.cyberboost.io` answers 404 — expected.
 
 ---
 
