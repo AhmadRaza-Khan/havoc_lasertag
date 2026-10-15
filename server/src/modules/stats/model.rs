@@ -28,6 +28,7 @@ pub struct StandingRow {
     pub player_id: Uuid,
     pub full_name: String,
     pub playername: String,
+    pub avatar_url: Option<String>,
     pub games: i64,
     pub points: i64,
     pub frags: i64,

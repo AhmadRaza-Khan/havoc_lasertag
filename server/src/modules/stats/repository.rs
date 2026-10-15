@@ -236,6 +236,7 @@ const STANDINGS: &str = "
                             ORDER BY COALESCE(SUM(gp.points), 0) DESC)
            END AS position,
            p.id AS player_id, p.full_name, p.playername,
+           CASE WHEN p.avatar_updated_at IS NULL THEN NULL ELSE '/api/avatars/' || p.id || '?v=' || floor(extract(epoch FROM p.avatar_updated_at) * 1000)::bigint END AS avatar_url,
            COUNT(gp.id) AS games,
            COALESCE(SUM(gp.points), 0)::BIGINT AS points,
            COALESCE(SUM(gp.frags), 0)::BIGINT AS frags,

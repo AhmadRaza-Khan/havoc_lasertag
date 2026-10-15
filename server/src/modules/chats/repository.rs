@@ -26,7 +26,8 @@ pub async fn list_players(
         "id <> $1 AND ($2::text IS NULL OR playername ILIKE $2 OR full_name ILIKE $2)";
 
     let items = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "SELECT id, full_name, playername, last_seen_at FROM players
+        "SELECT id, full_name, playername, last_seen_at,
+                CASE WHEN avatar_updated_at IS NULL THEN NULL ELSE '/api/avatars/' || id || '?v=' || floor(extract(epoch FROM avatar_updated_at) * 1000)::bigint END AS avatar_url FROM players
          WHERE {FILTER} ORDER BY full_name, playername LIMIT $3 OFFSET $4"
     )))
     .bind(me)
@@ -48,7 +49,8 @@ pub async fn list_players(
 }
 
 pub async fn find_player(db: &PgPool, id: Uuid) -> sqlx::Result<Option<ChatPlayer>> {
-    sqlx::query_as("SELECT id, full_name, playername, last_seen_at FROM players WHERE id = $1")
+    sqlx::query_as("SELECT id, full_name, playername, last_seen_at,
+                CASE WHEN avatar_updated_at IS NULL THEN NULL ELSE '/api/avatars/' || id || '?v=' || floor(extract(epoch FROM avatar_updated_at) * 1000)::bigint END AS avatar_url FROM players WHERE id = $1")
         .bind(id)
         .fetch_optional(db)
         .await
@@ -60,6 +62,7 @@ pub async fn list_conversations(db: &PgPool, me: Uuid) -> sqlx::Result<Vec<Conve
         "SELECT c.id,
                 o.id AS other_id, o.full_name AS other_full_name,
                 o.playername AS other_playername, o.last_seen_at AS other_last_seen_at,
+                CASE WHEN o.avatar_updated_at IS NULL THEN NULL ELSE '/api/avatars/' || o.id || '?v=' || floor(extract(epoch FROM o.avatar_updated_at) * 1000)::bigint END AS other_avatar_url,
                 lm.id AS last_message_id, lm.sender_id AS last_message_sender_id,
                 lm.body AS last_message_body, lm.created_at AS last_message_created_at,
                 lm.read_at AS last_message_read_at,

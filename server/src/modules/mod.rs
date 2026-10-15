@@ -2,6 +2,7 @@
 //! and exposes a `routes()` function that is mounted here.
 
 pub mod auth;
+pub mod avatars;
 pub mod bookings;
 pub mod chats;
 pub mod games;
@@ -22,6 +23,7 @@ use crate::state::AppState;
 pub fn router(state: &AppState) -> Router<AppState> {
     let public = Router::new()
         .nest("/health", health::routes())
+        .nest("/avatars", avatars::public_routes())
         .nest("/auth", auth::routes())
         .nest("/player/auth", player_auth::routes())
         // Authenticates itself: WebSocket clients may pass the token as a query parameter.
@@ -45,6 +47,7 @@ pub fn router(state: &AppState) -> Router<AppState> {
         .nest("/player/stats", stats::player_routes())
         .nest("/player/offers", offers::player_routes())
         .nest("/player/push-tokens", push::player_routes())
+        .nest("/player/me/avatar", avatars::player_routes())
         .route_layer(player_auth::require_player(state));
 
     public.merge(admin).merge(player)

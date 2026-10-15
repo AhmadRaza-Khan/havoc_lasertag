@@ -106,6 +106,7 @@ impl Conversation {
                 full_name: r.other_full_name,
                 playername: r.other_playername,
                 last_seen_at: r.other_last_seen_at,
+                avatar_url: r.other_avatar_url,
                 online,
             },
             last_message,

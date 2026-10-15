@@ -81,6 +81,7 @@ pub struct PlayerRef {
     pub id: Uuid,
     pub full_name: String,
     pub playername: String,
+    pub avatar_url: Option<String>,
 }
 
 impl Standing {
@@ -91,6 +92,7 @@ impl Standing {
                 id: r.player_id,
                 full_name: r.full_name,
                 playername: r.playername,
+                avatar_url: r.avatar_url,
             },
             games: r.games,
             points: r.points,
@@ -130,6 +132,7 @@ pub struct PublicStanding {
 pub struct PublicPlayer {
     pub id: Uuid,
     pub playername: String,
+    pub avatar_url: Option<String>,
 }
 
 impl PublicStanding {
@@ -141,6 +144,7 @@ impl PublicStanding {
             player: PublicPlayer {
                 id: r.player_id,
                 playername: r.playername,
+                avatar_url: r.avatar_url,
             },
             games: r.games,
             points: r.points,
@@ -297,6 +301,7 @@ mod tests {
             player_id: Uuid::from_u128(id),
             full_name: "Real Name".into(),
             playername: "wolf".into(),
+            avatar_url: None,
             games: 3,
             points: 120,
             frags: 6,

@@ -21,7 +21,8 @@ pub fn build(state: AppState) -> Result<Router, Box<dyn std::error::Error>> {
         ))
         .layer(cors)
         // API responses carry personal data: never store them in browser/proxy caches.
-        .layer(SetResponseHeaderLayer::overriding(
+        // Only handlers that set their own (versioned avatar images) are cacheable.
+        .layer(SetResponseHeaderLayer::if_not_present(
             header::CACHE_CONTROL,
             HeaderValue::from_static("no-store"),
         ))

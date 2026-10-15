@@ -10,6 +10,8 @@ pub struct ChatPlayer {
     pub full_name: String,
     pub playername: String,
     pub last_seen_at: Option<DateTime<Utc>>,
+    /// Profile picture path, if any.
+    pub avatar_url: Option<String>,
     /// Filled in from the live connection hub, not the database.
     #[sqlx(skip)]
     pub online: bool,
@@ -34,6 +36,7 @@ pub struct ConversationRow {
     pub other_full_name: String,
     pub other_playername: String,
     pub other_last_seen_at: Option<DateTime<Utc>>,
+    pub other_avatar_url: Option<String>,
     pub last_message_id: Option<Uuid>,
     pub last_message_sender_id: Option<Uuid>,
     pub last_message_body: Option<String>,

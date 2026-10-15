@@ -11,7 +11,8 @@ pub async fn list(
     offset: i64,
 ) -> sqlx::Result<(Vec<Player>, i64)> {
     let items = sqlx::query_as(
-        "SELECT id, full_name, playername, phone, email, created_at, updated_at
+        "SELECT id, full_name, playername, phone, email, created_at, updated_at,
+                CASE WHEN avatar_updated_at IS NULL THEN NULL ELSE '/api/avatars/' || id || '?v=' || floor(extract(epoch FROM avatar_updated_at) * 1000)::bigint END AS avatar_url
          FROM players
          WHERE $1::text IS NULL OR playername ILIKE $1 OR full_name ILIKE $1
          ORDER BY created_at DESC
@@ -36,7 +37,8 @@ pub async fn list(
 
 pub async fn find_by_id(db: &PgPool, id: Uuid) -> sqlx::Result<Option<Player>> {
     sqlx::query_as(
-        "SELECT id, full_name, playername, phone, email, created_at, updated_at
+        "SELECT id, full_name, playername, phone, email, created_at, updated_at,
+                CASE WHEN avatar_updated_at IS NULL THEN NULL ELSE '/api/avatars/' || id || '?v=' || floor(extract(epoch FROM avatar_updated_at) * 1000)::bigint END AS avatar_url
          FROM players WHERE id = $1",
     )
     .bind(id)
@@ -48,7 +50,8 @@ pub async fn create(db: &PgPool, p: &ValidPlayer, password_hash: &str) -> sqlx::
     sqlx::query_as(
         "INSERT INTO players (full_name, playername, phone, email, password_hash)
          VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, full_name, playername, phone, email, created_at, updated_at",
+         RETURNING id, full_name, playername, phone, email, created_at, updated_at,
+                CASE WHEN avatar_updated_at IS NULL THEN NULL ELSE '/api/avatars/' || id || '?v=' || floor(extract(epoch FROM avatar_updated_at) * 1000)::bigint END AS avatar_url",
     )
     .bind(&p.full_name)
     .bind(&p.playername)
@@ -78,7 +81,8 @@ pub async fn update(
                                         ELSE date_trunc('second', now()) END,
              updated_at = now()
          WHERE id = $1
-         RETURNING id, full_name, playername, phone, email, created_at, updated_at",
+         RETURNING id, full_name, playername, phone, email, created_at, updated_at,
+                CASE WHEN avatar_updated_at IS NULL THEN NULL ELSE '/api/avatars/' || id || '?v=' || floor(extract(epoch FROM avatar_updated_at) * 1000)::bigint END AS avatar_url",
     )
     .bind(id)
     .bind(&p.full_name)

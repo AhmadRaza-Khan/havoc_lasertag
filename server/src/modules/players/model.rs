@@ -13,4 +13,6 @@ pub struct Player {
     pub email: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Profile picture (`/api/avatars/{id}?v=…`, prefix the API origin), if they uploaded one.
+    pub avatar_url: Option<String>,
 }
