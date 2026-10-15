@@ -2,7 +2,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::{
-    dto::{ListQuery, PlayerInput},
+    dto::{ListQuery, PlayerInput, SignupInput},
     model::Player,
     repository,
 };
@@ -11,6 +11,7 @@ use crate::{
     shared::{
         pagination::{PageParams, Paginated, like_pattern},
         password,
+        validation::{normalize_handle, validate_handle},
     },
 };
 
@@ -44,6 +45,43 @@ pub async fn create(db: &PgPool, input: PlayerInput) -> AppResult<Player> {
         .map_err(map_unique_violation)?;
     tracing::info!(player_id = %created.id, playername = %created.playername, "player created");
     Ok(created)
+}
+
+/// A player signing up in the app: like an admin-created player, but email and phone are required.
+pub async fn signup(db: &PgPool, input: SignupInput) -> AppResult<Player> {
+    let required = |label: &str, v: &str| {
+        if v.trim().is_empty() {
+            Err(AppError::BadRequest(format!("{label} is required")))
+        } else {
+            Ok(())
+        }
+    };
+    required("Email", &input.email)?;
+    required("Phone number", &input.phone)?;
+    create(
+        db,
+        PlayerInput {
+            full_name: input.full_name,
+            playername: input.playername,
+            phone: Some(input.phone),
+            email: Some(input.email),
+            password: Some(input.password),
+        },
+    )
+    .await
+}
+
+/// Whether a playername can be taken: `Err` with the reason if it's invalid or in use.
+pub async fn check_playername(db: &PgPool, raw: &str) -> AppResult<String> {
+    let playername = normalize_handle(raw);
+    validate_handle("Playername", &playername)?;
+    if repository::find_credentials(db, &playername)
+        .await?
+        .is_some()
+    {
+        return Err(AppError::Conflict("Playername is already taken".into()));
+    }
+    Ok(playername)
 }
 
 pub async fn update(db: &PgPool, id: Uuid, input: PlayerInput) -> AppResult<Player> {

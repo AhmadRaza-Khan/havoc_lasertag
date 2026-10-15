@@ -44,6 +44,17 @@ impl Attempt {
     }
 }
 
+impl Attempt {
+    /// Counts per client network only (both keys are the IP), e.g. for limiting sign-ups.
+    pub fn per_client(realm: &str, headers: &HeaderMap) -> Self {
+        let ip = client_ip(headers);
+        Self {
+            client_key: format!("{realm}|{ip}"),
+            account_key: format!("{realm}|{ip}|all"),
+        }
+    }
+}
+
 impl LoginThrottle {
     /// Rejects with 429 if this client or account is locked out.
     pub fn check(&self, attempt: &Attempt) -> AppResult<()> {

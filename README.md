@@ -162,6 +162,8 @@ player bookings notify staff. Customers get Bookeo's emails when they have an em
 | Method | Path | Notes |
 |---|---|---|
 | POST | `/api/player/auth/login` | `{playername, password}` → `{token, player}`; send `Authorization: Bearer <token>` afterwards |
+| POST | `/api/player/auth/signup` | `{full_name, playername, email, phone, password}` (email and phone required) → `{token, player}` (201), signed in. 409 if the playername is taken; at most 5 sign-ups per network per 15 min (429). Admins can still create players in the panel |
+| GET | `/api/player/auth/playername-available?playername=` | `{playername, available, reason}` — for the sign-up form (format rules + taken) |
 | GET | `/api/player/auth/me` | current player |
 | GET | `/api/player/games` | bookable games from Bookeo (cached 10 min): price, duration, group size, `requires_approval` |
 | GET | `/api/player/games/{product_id}/slots?from=YYYY-MM-DD&to=YYYY-MM-DD` | open slots with `event_id` and seats left. No dates = rest of today; `from` only = that day; max 31 days. Dates are in the business timezone |

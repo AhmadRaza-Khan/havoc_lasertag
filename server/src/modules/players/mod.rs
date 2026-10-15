@@ -7,7 +7,9 @@ pub mod model;
 pub mod repository;
 mod service;
 
+pub use dto::SignupInput;
 pub use model::Player;
+pub use service::{check_playername, signup};
 
 use axum::{Router, routing::get};
 

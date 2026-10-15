@@ -1,4 +1,4 @@
-//! Player authentication for the mobile app: playername + password → Bearer token.
+//! Player authentication for the mobile app: sign-up and playername + password → Bearer token.
 //! Player tokens carry `kind: player`, so they can't be used on admin routes (and vice versa).
 
 mod extractor;
@@ -17,6 +17,8 @@ use crate::state::AppState;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/login", post(handlers::login))
+        .route("/signup", post(handlers::signup))
+        .route("/playername-available", get(handlers::playername_available))
         .route("/me", get(handlers::me))
 }
 

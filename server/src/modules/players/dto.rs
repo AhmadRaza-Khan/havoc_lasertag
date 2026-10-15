@@ -27,6 +27,16 @@ pub struct PlayerInput {
     pub password: Option<String>,
 }
 
+/// A player signing up in the mobile app. Email and phone are required here.
+#[derive(Debug, Deserialize)]
+pub struct SignupInput {
+    pub full_name: String,
+    pub playername: String,
+    pub email: String,
+    pub phone: String,
+    pub password: String,
+}
+
 /// Validated, normalized player fields ready to persist.
 #[derive(Debug)]
 pub struct ValidPlayer {
