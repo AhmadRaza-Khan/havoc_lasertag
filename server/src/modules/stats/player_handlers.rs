@@ -11,7 +11,7 @@ use super::{
     repository, service,
 };
 use crate::{
-    error::AppResult,
+    error::{AppError, AppResult},
     modules::player_auth::AuthPlayer,
     shared::pagination::{PageParams, Paginated},
     state::AppState,
@@ -31,7 +31,7 @@ pub async fn summary(
 }
 
 /// Rows shown in the app's leaderboard.
-const LEADERBOARD_SIZE: usize = 100;
+const LEADERBOARD_SIZE: usize = 30;
 
 /// The general leaderboard: every player who has played, ranked by all-time points.
 /// Any signed-in player can see it; others appear by playername only.
@@ -52,6 +52,47 @@ pub async fn leaderboard(
         me,
         total_ranked,
     }))
+}
+
+/// Another player's totals (from the leaderboard). 404 if they haven't played yet.
+pub async fn other_summary(
+    State(state): State<AppState>,
+    player: AuthPlayer,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<PublicStanding>> {
+    let row = repository::standing(&state.db, id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Player not found".into()))?;
+    PublicStanding::from_row(row, state.config.bookeo.timezone, player.id)
+        .map(Json)
+        .ok_or_else(|| AppError::NotFound("This player hasn't played yet".into()))
+}
+
+/// Another player's game records, newest first.
+pub async fn other_games(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Query(q): Query<PageQuery>,
+) -> AppResult<Json<Paginated<GameRecord>>> {
+    let params = PageParams {
+        page: q.page,
+        per_page: q.per_page,
+    };
+    let tz = state.config.bookeo.timezone;
+    let page = service::player_records(&state, id, params).await?;
+    Ok(Json(page.map(|r| GameRecord::from_row(r, tz))))
+}
+
+/// Another player's record in one game.
+pub async fn other_game(
+    State(state): State<AppState>,
+    Path((id, game_id)): Path<(Uuid, Uuid)>,
+) -> AppResult<Json<GameRecord>> {
+    let row = service::player_record(&state, id, game_id).await?;
+    Ok(Json(GameRecord::from_row(
+        row,
+        state.config.bookeo.timezone,
+    )))
 }
 
 /// The player's game records, newest first.

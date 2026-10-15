@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { statsApi } from './api'
 
 export const statsKeys = {
@@ -7,10 +7,24 @@ export const statsKeys = {
   leaderboard: () => [...statsKeys.all, 'leaderboard'] as const,
   imports: () => [...statsKeys.all, 'imports'] as const,
   import: (id: string) => [...statsKeys.all, 'import', id] as const,
+  player: (id: string) => [...statsKeys.all, 'player', id] as const,
+  playerGames: (id: string, page: number) => [...statsKeys.all, 'player', id, 'games', page] as const,
 }
 
 export function useLeaderboard() {
   return useQuery({ queryKey: statsKeys.leaderboard(), queryFn: statsApi.leaderboard })
+}
+
+export function usePlayerStanding(id: string) {
+  return useQuery({ queryKey: statsKeys.player(id), queryFn: () => statsApi.playerStanding(id) })
+}
+
+export function usePlayerGames(id: string, page: number) {
+  return useQuery({
+    queryKey: statsKeys.playerGames(id, page),
+    queryFn: () => statsApi.playerGames(id, page),
+    placeholderData: keepPreviousData,
+  })
 }
 
 export function useRecentImports() {

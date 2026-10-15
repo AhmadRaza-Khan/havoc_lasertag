@@ -2,18 +2,19 @@
 
 use axum::{
     Json,
-    extract::{Multipart, Path, State},
+    extract::{Multipart, Path, Query, State},
     http::StatusCode,
 };
 use uuid::Uuid;
 
 use super::{
-    dto::{ImportResponse, Standing},
-    service,
+    dto::{GameRecord, ImportResponse, PageQuery, Standing},
+    repository, service,
 };
 use crate::{
     error::{AppError, AppResult},
     modules::auth::AuthUser,
+    shared::pagination::{PageParams, Paginated},
     state::AppState,
 };
 
@@ -83,4 +84,31 @@ pub async fn leaderboard(State(state): State<AppState>) -> AppResult<Json<Vec<St
             .map(|r| Standing::from_row(r, tz))
             .collect(),
     ))
+}
+
+/// One player's all-time totals (from the leaderboard). Players who haven't played have
+/// zeros and no position.
+pub async fn player_standing(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<Standing>> {
+    let row = repository::standing(&state.db, id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Player not found".into()))?;
+    Ok(Json(Standing::from_row(row, state.config.bookeo.timezone)))
+}
+
+/// One player's game records with everything from the reports, newest first.
+pub async fn player_games(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Query(q): Query<PageQuery>,
+) -> AppResult<Json<Paginated<GameRecord>>> {
+    let params = PageParams {
+        page: q.page,
+        per_page: q.per_page,
+    };
+    let tz = state.config.bookeo.timezone;
+    let page = service::player_records(&state, id, params).await?;
+    Ok(Json(page.map(|r| GameRecord::from_row(r, tz))))
 }

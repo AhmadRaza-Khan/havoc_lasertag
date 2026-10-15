@@ -117,6 +117,8 @@ pub struct PublicStanding {
     pub efficiency: f64,
     pub frags: i64,
     pub deactivated: i64,
+    pub shots: i64,
+    pub hits: i64,
     /// Hits per shot, in percent.
     pub accuracy: i64,
     pub last_played_at: Option<DateTime<FixedOffset>>,
@@ -145,6 +147,8 @@ impl PublicStanding {
             efficiency: efficiency(r.frags, r.deactivated),
             frags: r.frags,
             deactivated: r.deactivated,
+            shots: r.shots,
+            hits: r.hits,
             accuracy: accuracy(r.hits, r.shots),
             last_played_at: r.last_played_at.map(|t| local(t, tz)),
         })

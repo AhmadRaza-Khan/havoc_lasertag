@@ -34,6 +34,8 @@ pub fn admin_routes() -> Router<AppState> {
         )
         .route("/imports/{id}", get(admin_handlers::get_import))
         .route("/leaderboard", get(admin_handlers::leaderboard))
+        .route("/players/{id}", get(admin_handlers::player_standing))
+        .route("/players/{id}/games", get(admin_handlers::player_games))
 }
 
 /// Mobile app routes; mounted behind `player_auth::require_player`.
@@ -43,4 +45,10 @@ pub fn player_routes() -> Router<AppState> {
         .route("/leaderboard", get(player_handlers::leaderboard))
         .route("/games", get(player_handlers::games))
         .route("/games/{game_id}", get(player_handlers::game))
+        .route("/players/{id}", get(player_handlers::other_summary))
+        .route("/players/{id}/games", get(player_handlers::other_games))
+        .route(
+            "/players/{id}/games/{game_id}",
+            get(player_handlers::other_game),
+        )
 }

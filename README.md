@@ -151,6 +151,8 @@ player bookings notify staff. Customers get Bookeo's emails when they have an em
 | GET | `/api/settings/payments` | admin | `{mode: pay_now\|pay_later, pay_later_minutes, pay_now_minutes, online_payment_enabled}` |
 | PUT | `/api/settings/payments` | admin | `{mode, pay_later_minutes}` (15 min – 30 days) |
 | GET | `/api/stats/leaderboard` | admin | general report: every player's all-time totals, ranked by points |
+| GET | `/api/stats/players/{id}` | admin | one player's all-time totals (the admin panel's player stats page) |
+| GET | `/api/stats/players/{id}/games?page=&per_page=` | admin | that player's game records, newest first, with everything from the reports |
 | GET | `/api/offers?search=&page=&per_page=` | admin | paginated, newest first; search matches title or description |
 | POST | `/api/offers` | admin | `{title, description, is_active?, starts_on?, ends_on?}` — dates `YYYY-MM-DD`, inclusive; `is_active` defaults to `true` |
 | GET | `/api/offers/{id}` | admin | |
@@ -175,9 +177,15 @@ player bookings notify staff. Customers get Bookeo's emails when they have an em
 | DELETE | `/api/player/bookings/{id}/payment` | the customer closed the payment page unpaid: cancels a *pay now* booking at once (a last-second payment still counts); *pay later* bookings are unaffected |
 
 | GET | `/api/player/stats` | my all-time totals and leaderboard `position` (`null` until I've played) |
-| GET | `/api/player/stats/leaderboard` | general leaderboard any player can see: top 100 by all-time points, plus `me` (my row, even if lower) and `total_ranked`. Others appear by playername only (no full name/email/phone) |
+| GET | `/api/player/stats/leaderboard` | general leaderboard any player can see: top 30 by all-time points, plus `me` (my row, even if lower) and `total_ranked`. Others appear by playername only (no full name/email/phone) |
 | GET | `/api/player/stats/games?page=&per_page=` | my game records, newest first — every field from my page |
 | GET | `/api/player/stats/games/{game_id}` | my record in one game (404 if I didn't play it) |
+| GET | `/api/player/stats/players/{id}` | another player's totals, opened from the leaderboard (playername only; 404 if they haven't played) |
+| GET | `/api/player/stats/players/{id}/games?page=&per_page=` | that player's game records |
+| GET | `/api/player/stats/players/{id}/games/{game_id}` | that player's record in one game |
+
+Display names: the admin panel and the app show `points` as **Score**, `frags` as **Kills** and
+`deactivated` as **KIA**, and don't show the number of games; the API keeps the original fields.
 
 | GET | `/api/player/offers` | promotions live today: active and within their dates (business timezone), newest first. Plain array of `{id, title, description, starts_on, ends_on, …}` |
 
