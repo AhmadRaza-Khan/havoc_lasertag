@@ -3,10 +3,12 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::model::{BookingRow, BookingWithPlayer};
+use crate::integrations::bookeo::BookingOption;
+use sqlx::types::Json;
 
 /// Every query aliases `bookings` as `b` so the same column list works with joins.
 const COLUMNS: &str = "b.id, b.player_id, b.bookeo_booking_number, b.product_id, b.product_name, \
-    b.event_id, b.start_time, b.end_time, b.num_people, b.other_players, b.status, b.price_amount, b.price_currency, \
+    b.event_id, b.start_time, b.end_time, b.num_people, b.other_players, b.status, b.price_amount, b.price_currency, b.options, \
     b.payment_status, b.payment_due_at, b.created_at, b.updated_at";
 
 const PLAYER_COLUMNS: &str = "p.full_name AS player_full_name, p.playername AS player_playername";
@@ -41,14 +43,15 @@ pub struct NewBookingRow<'a> {
     pub status: &'a str,
     pub price_amount: Option<&'a str>,
     pub price_currency: Option<&'a str>,
+    pub options: &'a [BookingOption],
 }
 
 pub async fn insert(db: &PgPool, b: &NewBookingRow<'_>) -> sqlx::Result<BookingRow> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "INSERT INTO bookings AS b (id, player_id, bookeo_booking_number, product_id, product_name,
              event_id, start_time, end_time, num_people, status, price_amount, price_currency,
-             other_players)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+             other_players, options)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          RETURNING {COLUMNS}"
     )))
     .bind(b.id)
@@ -64,6 +67,7 @@ pub async fn insert(db: &PgPool, b: &NewBookingRow<'_>) -> sqlx::Result<BookingR
     .bind(b.price_amount)
     .bind(b.price_currency)
     .bind(b.other_players)
+    .bind(Json(b.options))
     .fetch_one(db)
     .await
 }
@@ -189,6 +193,8 @@ pub struct BookingChanges<'a> {
     pub end_time: DateTime<Utc>,
     pub price_amount: Option<&'a str>,
     pub price_currency: Option<&'a str>,
+    /// `None` keeps the current add-ons.
+    pub options: Option<&'a [BookingOption]>,
 }
 
 pub async fn apply_changes(
@@ -206,6 +212,7 @@ pub async fn apply_changes(
              price_amount = COALESCE($7, b.price_amount),
              price_currency = COALESCE($8, b.price_currency),
              other_players = COALESCE($9, b.other_players),
+             options = COALESCE($10, b.options),
              updated_at = now()
          WHERE b.id = $1
          RETURNING {COLUMNS}"
@@ -219,6 +226,7 @@ pub async fn apply_changes(
     .bind(c.price_amount)
     .bind(c.price_currency)
     .bind(c.other_players)
+    .bind(c.options.map(Json))
     .fetch_one(db)
     .await
 }

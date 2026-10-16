@@ -4,8 +4,8 @@ use uuid::Uuid;
 
 use super::{
     dto::{
-        AdminListQuery, CreateBookingRequest, ListQuery, PlayerSummary, UpdateBookingRequest,
-        validate_group,
+        AdminListQuery, CreateBookingRequest, ListQuery, OptionInput, PlayerSummary,
+        UpdateBookingRequest, validate_group,
     },
     model::{BookingRow, BookingWithPlayer, status_of},
     repository::{self, AdminFilter, BookingChanges, NewBookingRow},
@@ -79,6 +79,7 @@ pub async fn create(
     let req = req.validated()?;
     let product = bookable_product(state, &req.product_id).await?;
     let participants = participants_for(&product, req.num_people)?;
+    let options = resolve_options(&product, &req.options, actor)?;
 
     let player = players::find_by_id(&state.db, player_id)
         .await?
@@ -103,6 +104,7 @@ pub async fn create(
                 external_ref: id.to_string(),
                 participants,
                 source: actor.source(),
+                options: options.clone(),
             },
             actor.options(bookeo_emails),
         )
@@ -129,6 +131,7 @@ pub async fn create(
             status: status_of(&booking),
             price_amount: price.map(|m| m.amount.as_str()),
             price_currency: price.map(|m| m.currency.as_str()),
+            options: &options,
         },
     )
     .await
@@ -174,6 +177,11 @@ pub async fn update(
 
     let product = bookable_product(state, &row.product_id).await?;
     let participants = participants_for(&product, req.num_people)?;
+    // Bookeo replaces the whole booking: re-send the current add-ons unless they're changing.
+    let options = match &req.options {
+        Some(inputs) => resolve_options(&product, inputs, actor)?,
+        None => row.options.0.clone(),
+    };
     let customer_id = ensure_bookeo_customer(state, row.player_id).await?;
     let has_email = players::find_by_id(&state.db, row.player_id)
         .await?
@@ -190,6 +198,7 @@ pub async fn update(
                 external_ref: row.id.to_string(),
                 participants,
                 source: actor.source(),
+                options: options.clone(),
             },
             actor.options(has_email),
         )
@@ -212,6 +221,7 @@ pub async fn update(
             end_time: end,
             price_amount: price.map(|m| m.amount.as_str()),
             price_currency: price.map(|m| m.currency.as_str()),
+            options: Some(&options),
         },
     )
     .await?)
@@ -320,6 +330,8 @@ pub async fn get(state: &AppState, id: Uuid, player_id: Option<Uuid>) -> AppResu
             end_time: end.to_utc(),
             price_amount: price.map(|m| m.amount.as_str()),
             price_currency: price.map(|m| m.currency.as_str()),
+            // Staff may have changed the add-ons in Bookeo.
+            options: booking.options.as_deref(),
         },
     )
     .await?)
@@ -387,6 +399,110 @@ pub async fn other_players_lookup<'a>(
 
 fn not_found() -> AppError {
     AppError::NotFound("Booking not found".into())
+}
+
+/// Longest text accepted for a text add-on.
+const MAX_OPTION_TEXT: usize = 500;
+
+/// Checks chosen add-ons against the game's options and turns them into what Bookeo expects.
+/// Players can't set staff-only options; required text options must be filled in.
+fn resolve_options(
+    product: &bookeo::Product,
+    inputs: &[OptionInput],
+    actor: Actor,
+) -> AppResult<Vec<bookeo::BookingOption>> {
+    let player = matches!(actor, Actor::Player);
+    let bad = |m: String| AppError::BadRequest(m);
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+
+    for input in inputs {
+        let id = input.id.trim();
+        if !seen.insert(id.to_string()) {
+            return Err(bad("An add-on was chosen twice".into()));
+        }
+        let value = input.value.trim();
+        let usable = |c: &bookeo::OptionCommon| {
+            if !c.enabled || (player && !c.shown_to_customers) {
+                Err(bad(format!("“{}” isn't available", c.name.trim())))
+            } else {
+                Ok(())
+            }
+        };
+        let option = |c: &bookeo::OptionCommon, value: String| bookeo::BookingOption {
+            id: Some(c.id.clone()),
+            name: Some(c.name.trim().to_string()),
+            value,
+        };
+
+        if let Some(o) = product.choice_options.iter().find(|o| o.common.id == id) {
+            usable(&o.common)?;
+            if value.is_empty() {
+                continue;
+            }
+            // Bookeo wants the chosen value's name; accept its id (or name) from clients.
+            let v = o
+                .values
+                .iter()
+                .find(|v| v.id == value || v.name.trim() == value)
+                .ok_or_else(|| {
+                    bad(format!(
+                        "Pick one of the choices for “{}”",
+                        o.common.name.trim()
+                    ))
+                })?;
+            out.push(option(&o.common, v.name.clone()));
+        } else if let Some(o) = product.number_options.iter().find(|o| o.common.id == id) {
+            usable(&o.common)?;
+            let n: i32 = value
+                .parse()
+                .ok()
+                .filter(|n| (o.min_value..=o.max_value).contains(n))
+                .ok_or_else(|| {
+                    bad(format!(
+                        "“{}” must be a number from {} to {}",
+                        o.common.name.trim(),
+                        o.min_value,
+                        o.max_value
+                    ))
+                })?;
+            out.push(option(&o.common, n.to_string()));
+        } else if let Some(o) = product.on_off_options.iter().find(|o| o.common.id == id) {
+            usable(&o.common)?;
+            let on = match value {
+                "true" => true,
+                "false" => false,
+                _ => return Err(bad(format!("“{}” must be on or off", o.common.name.trim()))),
+            };
+            out.push(option(&o.common, on.to_string()));
+        } else if let Some(o) = product.text_options.iter().find(|o| o.common.id == id) {
+            usable(&o.common)?;
+            if value.chars().count() > MAX_OPTION_TEXT {
+                return Err(bad(format!(
+                    "“{}” can be at most {MAX_OPTION_TEXT} characters",
+                    o.common.name.trim()
+                )));
+            }
+            if !value.is_empty() {
+                out.push(option(&o.common, value.to_string()));
+            }
+        } else {
+            return Err(bad("One of the add-ons isn't offered for this game".into()));
+        }
+    }
+
+    for o in &product.text_options {
+        let applies = o.common.enabled && (!player || o.common.shown_to_customers);
+        if applies
+            && o.required
+            && !out
+                .iter()
+                .any(|b| b.id.as_deref() == Some(o.common.id.as_str()))
+        {
+            return Err(bad(format!("“{}” is required", o.common.name.trim())));
+        }
+    }
+    Ok(out)
 }
 
 /// Checks the group size against the game's limits and builds Bookeo's participants.
@@ -499,6 +615,102 @@ mod tests {
             ("Jane".into(), "van Doe".into())
         );
         assert_eq!(split_name("Madonna"), ("Madonna".into(), "Madonna".into()));
+    }
+
+    /// Shaped like the client's real Bookeo product (global options get product-specific ids).
+    fn product_with_addons() -> bookeo::Product {
+        serde_json::from_value(serde_json::json!({
+            "productId": "P1", "name": "Open Session", "type": "fixed",
+            "choiceOptions": [{
+                "id": "P1_UPG", "name": "UPGRADE YOUR BATTLE", "index": 0, "description": "<p>Upgrades</p>",
+                "shownToCustomers": true, "enabled": true,
+                "values": [
+                    {"id": "P1_UPG_FULL", "name": "Full Tactical Upgrade", "description": ""},
+                    {"id": "P1_UPG_NONE", "name": "NO UPGRADE ", "description": ""}
+                ]
+            }],
+            "onOffOptions": [{
+                "id": "P1_SND", "name": "Search & Destroy Mission", "index": 1,
+                "shownToCustomers": true, "enabled": true, "defaultState": false
+            }],
+            "numberOptions": [{
+                "id": "P1_STAFF", "name": "Staff note count", "index": 2,
+                "shownToCustomers": false, "enabled": true, "minValue": 0, "maxValue": 5, "defaultValue": 0
+            }],
+            "textOptions": [{
+                "id": "P1_OLD", "name": "Retired", "index": 3,
+                "shownToCustomers": true, "enabled": false, "required": true
+            }]
+        }))
+        .unwrap()
+    }
+
+    fn input(id: &str, value: &str) -> OptionInput {
+        OptionInput {
+            id: id.into(),
+            value: value.into(),
+        }
+    }
+
+    #[test]
+    fn resolves_addons_for_bookeo() {
+        let p = product_with_addons();
+        let out = resolve_options(
+            &p,
+            &[input("P1_UPG", "P1_UPG_FULL"), input("P1_SND", "true")],
+            Actor::Player,
+        )
+        .unwrap();
+        assert_eq!(out.len(), 2);
+        // Bookeo wants the chosen value's name, not its id.
+        assert_eq!(
+            (out[0].id.as_deref(), out[0].value.as_str()),
+            (Some("P1_UPG"), "Full Tactical Upgrade")
+        );
+        assert_eq!(out[1].value, "true");
+        // A value's name works too; an empty choice is simply left out.
+        assert_eq!(
+            resolve_options(&p, &[input("P1_UPG", "NO UPGRADE")], Actor::Admin).unwrap()[0].value,
+            "NO UPGRADE "
+        );
+        assert!(
+            resolve_options(&p, &[input("P1_UPG", "")], Actor::Admin)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            resolve_options(&p, &[], Actor::Player).unwrap().is_empty(),
+            "disabled required text is ignored"
+        );
+    }
+
+    #[test]
+    fn rejects_bad_addons() {
+        let p = product_with_addons();
+        let err = |inputs: &[OptionInput], actor| {
+            resolve_options(&p, inputs, actor).unwrap_err().to_string()
+        };
+        assert!(err(&[input("P1_UPG", "nope")], Actor::Player).contains("Pick one"));
+        assert!(err(&[input("P1_SND", "yes")], Actor::Player).contains("on or off"));
+        assert!(err(&[input("OTHER_GAME_OPT", "true")], Actor::Player).contains("isn't offered"));
+        assert!(
+            err(
+                &[input("P1_SND", "true"), input("P1_SND", "false")],
+                Actor::Player
+            )
+            .contains("twice")
+        );
+        assert!(
+            err(&[input("P1_OLD", "x")], Actor::Admin).contains("isn't available"),
+            "disabled"
+        );
+        // Staff-only options: staff yes (within range), players no.
+        assert!(err(&[input("P1_STAFF", "2")], Actor::Player).contains("isn't available"));
+        assert_eq!(
+            resolve_options(&p, &[input("P1_STAFF", "2")], Actor::Admin).unwrap()[0].value,
+            "2"
+        );
+        assert!(err(&[input("P1_STAFF", "9")], Actor::Admin).contains("from 0 to 5"));
     }
 
     #[test]

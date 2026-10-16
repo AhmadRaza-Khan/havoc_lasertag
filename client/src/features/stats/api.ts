@@ -1,6 +1,5 @@
 import { apiRequest } from '@/lib/api-client'
-import type { Paginated } from '@/lib/api-client'
-import type { GameRecord, Standing, StatImport } from './types'
+import type { Standing, StatImport } from './types'
 
 export const statsApi = {
   /** Starts an import; it's processed in the background (poll `getImport`). */
@@ -13,6 +12,4 @@ export const statsApi = {
   recentImports: () => apiRequest<StatImport[]>('/stats/imports'),
   leaderboard: () => apiRequest<Standing[]>('/stats/leaderboard'),
   playerStanding: (id: string) => apiRequest<Standing>(`/stats/players/${id}`),
-  playerGames: (id: string, page: number) =>
-    apiRequest<Paginated<GameRecord>>(`/stats/players/${id}/games?page=${page}&per_page=20`),
 }

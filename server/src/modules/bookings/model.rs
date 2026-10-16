@@ -20,6 +20,8 @@ pub struct BookingRow {
     pub status: String,
     pub price_amount: Option<String>,
     pub price_currency: Option<String>,
+    /// Add-ons, as sent to Bookeo.
+    pub options: sqlx::types::Json<Vec<bookeo::BookingOption>>,
     /// `not_required`, `unpaid` or `paid` (online payment of app bookings).
     pub payment_status: String,
     /// Unpaid bookings are canceled after this.
@@ -64,6 +66,7 @@ mod tests {
             accepted,
             price: None,
             participants: None,
+            options: None,
         }
     }
 

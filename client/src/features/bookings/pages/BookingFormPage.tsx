@@ -8,11 +8,13 @@ import type { Game, Slot } from '@/features/games'
 import {
   addDays,
   businessDate,
-  daysBetween,
   formatDay,
   formatMoney,
   formatTimeRange,
 } from '@/lib/format'
+import { addOnLines, addOnsError, initialAddOnValue, toOptionInputs } from '../addOns'
+import type { AddOnValues } from '../addOns'
+import { AddOnsPicker } from '../components/AddOns'
 import { OtherPlayers } from '../components/OtherPlayers'
 import { PlayerPicker } from '../components/PlayerPicker'
 import type { PickedPlayer } from '../components/PlayerPicker'
@@ -23,8 +25,6 @@ import type { Booking } from '../types'
 import '../bookings.css'
 
 /** Bookeo allows at most 31 days per availability search. */
-const MAX_RANGE_DAYS = 31
-const DEFAULT_RANGE_DAYS = 7
 
 /** /bookings/new and /bookings/:id/edit */
 export default function BookingFormPage() {
@@ -68,8 +68,7 @@ function BookingForm({ booking }: { booking: Booking | null }) {
 
   const [player, setPlayer] = useState<PickedPlayer | null>(booking?.player ?? null)
   const [productId, setProductId] = useState<string | null>(booking?.product_id ?? null)
-  const [from, setFrom] = useState(initialFrom)
-  const [to, setTo] = useState(addDays(initialFrom, DEFAULT_RANGE_DAYS - 1))
+  const [date, setDate] = useState(initialFrom)
   // When editing, the booking's own slot is pre-selected even if it's not in the search results.
   const [slot, setSlot] = useState<Slot | null>(
     booking
@@ -106,13 +105,17 @@ function BookingForm({ booking }: { booking: Booking | null }) {
   const games = useGames()
   const game = games.data?.find((g) => g.product_id === productId) ?? null
 
-  const rangeError =
-    to < from
-      ? '"To" must be on or after "From".'
-      : daysBetween(from, to) + 1 > MAX_RANGE_DAYS
-        ? `Pick at most ${MAX_RANGE_DAYS} days.`
-        : null
-  const slots = useSlots(rangeError ? null : productId, from, to)
+  // Add-ons: what the admin changed, over the booking's saved ones (or Bookeo's defaults).
+  const [addOnEdits, setAddOnEdits] = useState<AddOnValues>({})
+  const gameOptions = game?.options ?? []
+  const addOnValues: AddOnValues = Object.fromEntries(
+    gameOptions.map((o) => [o.id, addOnEdits[o.id] ?? initialAddOnValue(o, booking?.options ?? null)]),
+  )
+  const addOnProblem = addOnsError(gameOptions, addOnValues)
+  const chosenAddOns = addOnLines(gameOptions, addOnValues)
+
+  // The chosen day's slots.
+  const slots = useSlots(date ? productId : null, date, date)
 
   const create = useCreateBooking()
   const update = useUpdateBooking()
@@ -130,11 +133,17 @@ function BookingForm({ booking }: { booking: Booking | null }) {
   const people = Number(numPeople)
   const peopleError = validatePeople(people, numPeople, game, slotCapacity, others.length)
   const canSubmit =
-    player !== null && game !== null && slot !== null && !peopleError && !mutation.isPending
+    player !== null &&
+    game !== null &&
+    slot !== null &&
+    !peopleError &&
+    !addOnProblem &&
+    !mutation.isPending
 
   function selectGame(value: string) {
     setProductId(value || null)
     setSlot(null)
+    setAddOnEdits({})
   }
 
   function handleSubmit(e: FormEvent) {
@@ -148,6 +157,7 @@ function BookingForm({ booking }: { booking: Booking | null }) {
             event_id: slot.event_id,
             num_people: people,
             other_player_ids: others.map((o) => o.id),
+            options: toOptionInputs(gameOptions, addOnValues),
           },
         },
         {
@@ -163,6 +173,7 @@ function BookingForm({ booking }: { booking: Booking | null }) {
           event_id: slot.event_id,
           num_people: people,
           other_player_ids: others.map((o) => o.id),
+          options: toOptionInputs(gameOptions, addOnValues),
         },
         {
           onSuccess: (b) =>
@@ -178,7 +189,9 @@ function BookingForm({ booking }: { booking: Booking | null }) {
     }
   }
 
-  const otherSlots = slots.data?.slots.filter((s) => s.event_id !== booking?.event_id) ?? []
+  // Only the chosen day (venue time), and not the slot the booking already has.
+  const otherSlots =
+    slots.data?.slots.filter((s) => s.event_id !== booking?.event_id && businessDate(s.start_time) === date) ?? []
 
   return (
     <form className="booking-form" onSubmit={handleSubmit}>
@@ -193,20 +206,7 @@ function BookingForm({ booking }: { booking: Booking | null }) {
             <PlayerPicker value={player} onChange={selectPlayer} />
           )}
         </Step>
-
-        <Step n={2} title="Other players" optional>
-          <p className="muted small">
-            Registered players joining this booking. Each one is counted in the number of people.
-          </p>
-          <OtherPlayers
-            value={others}
-            mainPlayerId={player?.id ?? null}
-            onAdd={addOther}
-            onRemove={removeOther}
-          />
-        </Step>
-
-        <Step n={3} title="Game">
+        <Step n={2} title="Game">
           {booking ? (
             <ReadOnly
               primary={booking.game_name}
@@ -232,39 +232,79 @@ function BookingForm({ booking }: { booking: Booking | null }) {
           )}
           {game && <GameFacts game={game} />}
         </Step>
-
-        <Step n={4} title="Dates">
-          <div className="form-row">
-            <label>
-              From
-              <input
-                type="date"
-                value={from}
-                min={today}
-                required
-                onChange={(e) => {
-                  const f = e.target.value
-                  setFrom(f)
-                  if (f && to < f) setTo(addDays(f, DEFAULT_RANGE_DAYS - 1))
-                }}
+        <Step n={3} title="Add-ons" optional>
+          {!game ? (
+            <p className="muted">Select a game to see its add-ons.</p>
+          ) : gameOptions.length === 0 ? (
+            <p className="muted">This game has no add-ons.</p>
+          ) : (
+            <>
+              <AddOnsPicker
+                options={gameOptions}
+                values={addOnValues}
+                onChange={(id, value) => setAddOnEdits((e) => ({ ...e, [id]: value }))}
               />
-            </label>
-            <label>
-              To
-              <input
-                type="date"
-                value={to}
-                min={from}
-                max={addDays(from, MAX_RANGE_DAYS - 1)}
-                required
-                onChange={(e) => setTo(e.target.value)}
-              />
-            </label>
-          </div>
-          {rangeError && <p className="error">{rangeError}</p>}
+              {addOnProblem && <p className="error">{addOnProblem}</p>}
+            </>
+          )}
         </Step>
-
-        <Step n={5} title="Slot">
+        <Step n={4} title="Number of players">
+          <label className="people-input">
+            <span className="sr-only">Number of people</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={Math.max(game?.min_people ?? 1, others.length + 1)}
+              max={Math.min(game?.max_people ?? 100, slotCapacity ?? 100)}
+              value={numPeople}
+              onChange={(e) => setNumPeople(e.target.value)}
+              placeholder={game?.min_people ? `${game.min_people}–${game.max_people}` : ''}
+            />
+          </label>
+          {others.length > 0 && (
+            <p className="muted small">
+              Includes {player?.full_name ?? 'the player'} and {others.length} other player
+              {others.length === 1 ? '' : 's'}. Raise it for unregistered guests.
+            </p>
+          )}
+          {numPeople !== '' && peopleError && <p className="error">{peopleError}</p>}
+        </Step>
+        <Step n={5} title="Other players" optional>
+          <p className="muted small">
+            Registered players joining this booking. Each one is counted in the number of players.
+          </p>
+          <OtherPlayers
+            value={others}
+            mainPlayerId={player?.id ?? null}
+            onAdd={addOther}
+            onRemove={removeOther}
+          />
+        </Step>
+        <Step n={6} title="Date">
+          <div className="date-picker">
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={date <= today}
+              onClick={() => setDate(maxDate(today, addDays(date, -1)))}
+            >
+              ‹ Previous day
+            </button>
+            <input
+              type="date"
+              aria-label="Date"
+              value={date}
+              min={today}
+              required
+              onChange={(e) => e.target.value && setDate(e.target.value)}
+            />
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setDate(addDays(date, 1))}>
+              Next day ›
+            </button>
+          </div>
+          <p className="muted small">{formatDay(`${date}T12:00:00Z`)}</p>
+        </Step>
+        <Step n={7} title="Time">
           {booking && (
             <div className="current-slot">
               <span className="muted small">Current slot</span>
@@ -290,15 +330,15 @@ function BookingForm({ booking }: { booking: Booking | null }) {
             </div>
           )}
           {!productId ? (
-            <p className="muted">Select a game to see its available slots.</p>
-          ) : rangeError ? null : slots.isPending ? (
-            <p className="muted">Loading slots…</p>
+            <p className="muted">Select a game to see its available times.</p>
+          ) : slots.isPending || slots.isPlaceholderData ? (
+            // isPlaceholderData: still showing the previous day's (or game's) results.
+            <p className="muted">Loading times…</p>
           ) : slots.isError ? (
             <p className="error">{slots.error.message}</p>
           ) : otherSlots.length === 0 ? (
             <p className="muted">
-              No {isEdit ? 'other ' : ''}available slots between {formatDay(`${from}T12:00:00Z`)} and{' '}
-              {formatDay(`${to}T12:00:00Z`)}.
+              No {isEdit ? 'other ' : ''}available times on {formatDay(`${date}T12:00:00Z`)}. Try another day.
             </p>
           ) : (
             <>
@@ -311,28 +351,6 @@ function BookingForm({ booking }: { booking: Booking | null }) {
               />
             </>
           )}
-        </Step>
-
-        <Step n={6} title="Number of people">
-          <label className="people-input">
-            <span className="sr-only">Number of people</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={Math.max(game?.min_people ?? 1, others.length + 1)}
-              max={Math.min(game?.max_people ?? 100, slotCapacity ?? 100)}
-              value={numPeople}
-              onChange={(e) => setNumPeople(e.target.value)}
-              placeholder={game?.min_people ? `${game.min_people}–${game.max_people}` : ''}
-            />
-          </label>
-          {others.length > 0 && (
-            <p className="muted small">
-              Includes {player?.full_name ?? 'the player'} and {others.length} other player
-              {others.length === 1 ? '' : 's'}. Raise it for unregistered guests.
-            </p>
-          )}
-          {numPeople !== '' && peopleError && <p className="error">{peopleError}</p>}
         </Step>
       </div>
 
@@ -355,7 +373,7 @@ function BookingForm({ booking }: { booking: Booking | null }) {
           )}
           <dt>Game</dt>
           <dd>{game?.name ?? booking?.game_name ?? <span className="muted">Not selected</span>}</dd>
-          <dt>Slot</dt>
+          <dt>Date &amp; time</dt>
           <dd>
             {slot ? (
               <>
@@ -367,10 +385,25 @@ function BookingForm({ booking }: { booking: Booking | null }) {
               <span className="muted">Not selected</span>
             )}
           </dd>
-          <dt>People</dt>
+          <dt>Players</dt>
           <dd>{numPeople && !peopleError ? people : <span className="muted">—</span>}</dd>
+          {chosenAddOns.length > 0 && (
+            <>
+              <dt>Add-ons</dt>
+              <dd>
+                {chosenAddOns.map((line) => (
+                  <span key={line} className="summary-addon">
+                    {line}
+                  </span>
+                ))}
+              </dd>
+            </>
+          )}
           <dt>Estimated price</dt>
-          <dd>{estimate(game, people, peopleError) ?? <span className="muted">—</span>}</dd>
+          <dd>
+            {estimate(game, people, peopleError) ?? <span className="muted">—</span>}
+            {chosenAddOns.length > 0 && <span className="muted small summary-addon">+ add-ons</span>}
+          </dd>
         </dl>
         {game?.requires_approval && !isEdit && (
           <p className="summary-note">
@@ -384,7 +417,7 @@ function BookingForm({ booking }: { booking: Booking | null }) {
         <button type="submit" className="btn btn-primary" disabled={!canSubmit}>
           {mutation.isPending ? 'Saving…' : isEdit ? 'Save changes' : 'Create booking'}
         </button>
-        <p className="muted small">Final price is calculated by Bookeo.</p>
+        <p className="muted small">Final price, including add-ons, is calculated by Bookeo.</p>
       </aside>
     </form>
   )

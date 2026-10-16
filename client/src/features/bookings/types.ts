@@ -14,6 +14,8 @@ export type Booking = {
   num_people: number
   status: BookingStatus
   price: { amount: string; currency: string } | null
+  /** Add-ons as stored in Bookeo (choice: the value's name; on/off: "true"/"false"). */
+  options: BookingOption[]
   payment_status: PaymentStatus
   /** Unpaid bookings are canceled automatically after this. */
   payment_due_at: string | null
@@ -24,6 +26,11 @@ export type Booking = {
   updated_at: string
 }
 
+export type BookingOption = { id: string | null; name: string | null; value: string }
+
+/** A chosen add-on: the game option's id and its value (choice: the value's id). */
+export type OptionInput = { id: string; value: string }
+
 export type CreateBookingInput = {
   player_id: string
   product_id: string
@@ -31,6 +38,7 @@ export type CreateBookingInput = {
   /** Everyone in the group: the player, the other players and any unregistered guests. */
   num_people: number
   other_player_ids?: string[]
+  options?: OptionInput[]
 }
 
 export type UpdateBookingInput = {
@@ -38,6 +46,8 @@ export type UpdateBookingInput = {
   num_people: number
   /** Replaces the other players (omit to keep them). */
   other_player_ids?: string[]
+  /** Replaces the add-ons (omit to keep them). */
+  options?: OptionInput[]
 }
 
 export type BookingListParams = {

@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use super::model::{BookingRow, BookingWithPlayer};
 use crate::error::{AppError, AppResult};
+use crate::integrations::bookeo::BookingOption;
 
 const MAX_PEOPLE: i32 = 100;
 
@@ -23,6 +24,17 @@ pub struct CreateBookingRequest {
     /// Optional: other registered players joining the booking.
     #[serde(default)]
     pub other_player_ids: Vec<Uuid>,
+    /// Optional add-ons, from the game's `options`.
+    #[serde(default)]
+    pub options: Vec<OptionInput>,
+}
+
+/// An add-on chosen for a booking: an option `id` from the game's `options`, and its value —
+/// the chosen value's `id` (choice), a number, `"true"`/`"false"` (on/off) or text.
+#[derive(Debug, Clone, Deserialize)]
+pub struct OptionInput {
+    pub id: String,
+    pub value: String,
 }
 
 impl CreateBookingRequest {
@@ -42,6 +54,7 @@ impl CreateBookingRequest {
             event_id,
             num_people: self.num_people,
             other_player_ids,
+            options: self.options,
         })
     }
 }
@@ -61,6 +74,8 @@ pub struct UpdateBookingRequest {
     pub num_people: i32,
     /// Replaces the other players; omit to keep them as they are.
     pub other_player_ids: Option<Vec<Uuid>>,
+    /// Replaces the add-ons; omit to keep them as they are.
+    pub options: Option<Vec<OptionInput>>,
 }
 
 impl UpdateBookingRequest {
@@ -78,6 +93,7 @@ impl UpdateBookingRequest {
             event_id,
             num_people: self.num_people,
             other_player_ids,
+            options: self.options,
         })
     }
 }
@@ -182,6 +198,9 @@ pub struct BookingResponse {
     /// `confirmed`, `pending` (awaiting staff approval) or `canceled`.
     pub status: String,
     pub price: Option<BookingPrice>,
+    /// Add-ons on the booking, as `{id, name, value}` (choice: the value's name; on/off:
+    /// "true"/"false").
+    pub options: Vec<BookingOption>,
     /// `not_required` (nothing to pay online), `unpaid` or `paid`.
     pub payment_status: String,
     /// Unpaid bookings are canceled after this. Business timezone.
@@ -225,6 +244,7 @@ impl BookingResponse {
             num_people: row.num_people,
             status: row.status,
             price,
+            options: row.options.0,
             payment_status: row.payment_status,
             payment_due_at: row
                 .payment_due_at
@@ -272,6 +292,7 @@ mod tests {
             event_id: event.into(),
             num_people: n,
             other_player_ids: Vec::new(),
+            options: Vec::new(),
         }
     }
 
@@ -313,12 +334,14 @@ mod tests {
             event_id: " e ".into(),
             num_people: 3,
             other_player_ids: None,
+            options: None,
         };
         assert_eq!(ok.validated().unwrap().event_id, "e");
         let bad = UpdateBookingRequest {
             event_id: "e".into(),
             num_people: 0,
             other_player_ids: None,
+            options: None,
         };
         assert!(bad.validated().is_err());
     }

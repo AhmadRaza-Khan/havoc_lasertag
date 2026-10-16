@@ -37,6 +37,87 @@ pub struct Product {
     pub api_bookings_allowed: Option<bool>,
     pub shown_to_customers: Option<bool>,
     pub accept_deny: Option<bool>,
+    /// Add-ons ("options"), including the business's global ones, which Bookeo lists on every
+    /// product with product-specific ids. Each list is absent when empty.
+    #[serde(default)]
+    pub choice_options: Vec<ChoiceOption>,
+    #[serde(default)]
+    pub number_options: Vec<NumberOption>,
+    #[serde(default)]
+    pub on_off_options: Vec<OnOffOption>,
+    #[serde(default)]
+    pub text_options: Vec<TextOption>,
+}
+
+/// Fields every kind of option has.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OptionCommon {
+    pub id: String,
+    pub name: String,
+    /// Display order across all kinds of options.
+    pub index: i32,
+    /// HTML from Bookeo's editor.
+    pub description: Option<String>,
+    /// False: staff-only, not offered to customers.
+    pub shown_to_customers: bool,
+    /// False: not for new bookings.
+    pub enabled: bool,
+}
+
+/// Pick one value from a list.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChoiceOption {
+    #[serde(flatten)]
+    pub common: OptionCommon,
+    #[serde(default)]
+    pub values: Vec<ChoiceOptionValue>,
+    pub default_value_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ChoiceOptionValue {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NumberOption {
+    #[serde(flatten)]
+    pub common: OptionCommon,
+    pub min_value: i32,
+    pub max_value: i32,
+    pub default_value: i32,
+}
+
+/// A checkbox.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OnOffOption {
+    #[serde(flatten)]
+    pub common: OptionCommon,
+    pub default_state: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TextOption {
+    #[serde(flatten)]
+    pub common: OptionCommon,
+    pub required: bool,
+}
+
+/// An option value on a booking. For choice options `value` is the chosen value's *name*;
+/// for checkboxes "true"/"false".
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BookingOption {
+    pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub value: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -110,6 +191,9 @@ pub struct Booking {
     pub accepted: Option<bool>,
     pub price: Option<Price>,
     pub participants: Option<Participants>,
+    /// Absent when the booking has none.
+    #[serde(default)]
+    pub options: Option<Vec<BookingOption>>,
 }
 
 impl Booking {
@@ -182,6 +266,8 @@ pub struct NewBooking {
     pub external_ref: String,
     pub participants: Participants,
     pub source: &'static str,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub options: Vec<BookingOption>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

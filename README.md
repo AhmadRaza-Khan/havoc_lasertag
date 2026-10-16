@@ -139,7 +139,7 @@ Two kinds of token, never interchangeable: **admin** (web panel; httpOnly cookie
 | GET | `/api/bookings?search=&player_id=&when=upcoming\|past&status=&page=&per_page=` | admin | all bookings with their player; search matches player name, playername or booking number |
 | POST | `/api/bookings` | admin | `{player_id, product_id, event_id, num_people}` — books for any player |
 | GET | `/api/bookings/{id}` | admin | status refreshed from Bookeo |
-| PUT | `/api/bookings/{id}` | admin | `{event_id, num_people}` — move to another slot of the same game / change group size |
+| PUT | `/api/bookings/{id}` | admin | `{event_id, num_people, other_player_ids?, options?}` — move to another slot of the same game / change group size / add-ons (omitted `options` keeps the current ones; they're re-sent to Bookeo, which replaces the whole booking) |
 | DELETE | `/api/bookings/{id}` | admin | cancels in Bookeo (seats freed); the booking stays listed as `canceled` |
 
 Admin booking changes are sent to Bookeo as staff actions (`mode=backend`) without notifying staff;
@@ -167,9 +167,12 @@ player bookings notify staff. Customers get Bookeo's emails when they have an em
 | POST | `/api/player/auth/signup` | `{full_name, playername, email, phone, password}` (email and phone required) → `{token, player}` (201), signed in. 409 if the playername is taken; at most 5 sign-ups per network per 15 min (429). Admins can still create players in the panel |
 | GET | `/api/player/auth/playername-available?playername=` | `{playername, available, reason}` — for the sign-up form (format rules + taken) |
 | GET | `/api/player/auth/me` | current player |
-| GET | `/api/player/games` | bookable games from Bookeo (cached 10 min): price, duration, group size, `requires_approval` |
+| PUT | `/api/player/me/avatar` | profile picture: multipart field `file`, JPEG/PNG/WebP (checked by content), max 900 KB (the app sends a ~1024 px JPEG) → updated player |
+| DELETE | `/api/player/me/avatar` | remove the picture → updated player |
+| GET | `/api/avatars/{player_id}?v=…` | the picture (no token; cached for a year — the `v` changes with each upload). Players, chat players and leaderboard entries carry it as `avatar_url` (a path: prefix the API origin) |
+| GET | `/api/player/games` | bookable games from Bookeo (cached 10 min): price, duration, group size, `requires_approval`, and `options` — the game's add-ons (Bookeo options, including the business's global ones): `{id, kind: choice\|number\|on_off\|text, name, description (plain text), staff_only, required, values[{id, name, description}], min, max, default}` in display order. Bookeo adds their prices to the booking |
 | GET | `/api/player/games/{product_id}/slots?from=YYYY-MM-DD&to=YYYY-MM-DD` | open slots with `event_id` and seats left. No dates = rest of today; `from` only = that day; max 31 days. Dates are in the business timezone |
-| POST | `/api/player/bookings` | `{product_id, event_id, num_people}` → booking (201). Bookeo rejections (slot full, …) → 422 |
+| POST | `/api/player/bookings` | `{product_id, event_id, num_people, other_player_ids?, options?: [{id, value}]}` → booking (201). Add-on values: the choice value's `id`, a number, `"true"`/`"false"`, or text; staff-only add-ons are refused. Bookings return `options: [{id, name, value}]` (choice: the value's name). Bookeo rejections (slot full, …) → 422 |
 | GET | `/api/player/bookings?when=upcoming\|past&page=&per_page=` | the player's own bookings |
 | GET | `/api/player/bookings/{id}` | one booking, status refreshed from Bookeo |
 | POST | `/api/player/bookings/{id}/payment?lang=ar` | QNB payment page for the booking → `{status, pay_url, amount, currency, due_at, last_failure, …}`. Reuses the open link; a new one after a failed attempt. 409 if nothing to pay / canceled / time to pay passed |

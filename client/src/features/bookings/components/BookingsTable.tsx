@@ -48,8 +48,11 @@ export function BookingsTable({ bookings, onCancel }: BookingsTableProps) {
                     )}
                   </div>
                 </td>
-                <td className="game-cell" title={b.game_name}>
+                <td className="game-cell" title={[b.game_name, ...addOnLabels(b)].join('\n')}>
                   {b.game_name}
+                  {addOnLabels(b).length > 0 && (
+                    <span className="muted small game-addons">+ {addOnLabels(b).join(' · ')}</span>
+                  )}
                 </td>
                 <td>
                   <div className="stack-cell">
@@ -99,4 +102,14 @@ export function BookingsTable({ bookings, onCancel }: BookingsTableProps) {
       </table>
     </div>
   )
+}
+
+/** Readable add-ons of a booking: on/off ones by name when on, others as "name: value". */
+function addOnLabels(b: Booking): string[] {
+  return b.options.flatMap((o) => {
+    const name = (o.name ?? '').trim()
+    if (o.value === 'false') return []
+    if (o.value === 'true') return name ? [name] : []
+    return [name ? `${name}: ${o.value.trim()}` : o.value.trim()]
+  })
 }

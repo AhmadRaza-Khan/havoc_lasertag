@@ -9,6 +9,26 @@ export type Game = {
   max_people: number | null
   /** Bookings stay "pending" until staff accept them. */
   requires_approval: boolean
+  /** Add-ons offered when booking (Bookeo "options"), in display order. Bookeo adds their prices. */
+  options: GameOption[]
+}
+
+/** An add-on. Send chosen ones as `options: [{ id, value }]`. */
+export type GameOption = {
+  id: string
+  /** choice: pick one of `values` (send the value's id) · number · on_off ("true"/"false") · text */
+  kind: 'choice' | 'number' | 'on_off' | 'text'
+  name: string
+  description: string | null
+  /** Not offered to players in the app. */
+  staff_only: boolean
+  /** Text add-ons: must be filled in. */
+  required: boolean
+  values: { id: string; name: string; description: string | null }[]
+  min: number | null
+  max: number | null
+  /** Value to preselect (value id, number or "true"/"false"). */
+  default: string | null
 }
 
 export type Slot = {
