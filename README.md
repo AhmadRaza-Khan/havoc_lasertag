@@ -155,10 +155,13 @@ player bookings notify staff. Customers get Bookeo's emails when they have an em
 | GET | `/api/stats/players/{id}` | admin | one player's all-time totals (the admin panel's player stats page) |
 | GET | `/api/stats/players/{id}/games?page=&per_page=` | admin | that player's game records, newest first, with everything from the reports |
 | GET | `/api/offers?search=&page=&per_page=` | admin | paginated, newest first; search matches title or description |
-| POST | `/api/offers` | admin | `{title, description, is_active?, starts_on?, ends_on?}` — dates `YYYY-MM-DD`, inclusive; `is_active` defaults to `true` |
+| POST | `/api/offers` | admin | `{title?, description?, is_active?, starts_on?, ends_on?}` — dates `YYYY-MM-DD`, inclusive; `is_active` defaults to `true`. Text is optional: an offer can be text, an image, or both (the panel requires one of them) |
 | GET | `/api/offers/{id}` | admin | |
-| PUT | `/api/offers/{id}` | admin | same body |
+| PUT | `/api/offers/{id}` | admin | same body; clearing the text is refused if the offer has no image |
 | DELETE | `/api/offers/{id}` | admin | |
+| PUT | `/api/offers/{id}/image` | admin | multipart field `file`: JPEG/PNG/WebP (checked by content), max 900 KB — the panel resizes to 1600 px first → updated offer |
+| DELETE | `/api/offers/{id}/image` | admin | removes the image (refused if the offer has no text) → updated offer |
+| GET | `/api/offer-images/{id}?v=…` | public | the image, cached for a year; offers carry it as `image_url` (a path) |
 
 ### Player (mobile app)
 
@@ -180,18 +183,24 @@ player bookings notify staff. Customers get Bookeo's emails when they have an em
 | GET | `/api/player/bookings/{id}/payment` | payment state, confirmed with QNB — poll while the payment page is open |
 | DELETE | `/api/player/bookings/{id}/payment` | the customer closed the payment page unpaid: cancels a *pay now* booking at once (a last-second payment still counts); *pay later* bookings are unaffected |
 
-| GET | `/api/player/stats` | my all-time totals and leaderboard `position` (`null` until I've played) |
+| GET | `/api/player/stats` | my all-time totals and leaderboard `position` (`null` until I've played), plus `details` (below) |
 | GET | `/api/player/stats/leaderboard` | general leaderboard any player can see: top 30 by all-time points, plus `me` (my row, even if lower) and `total_ranked`. Others appear by playername only (no full name/email/phone) |
 | GET | `/api/player/stats/games?page=&per_page=` | my game records, newest first — every field from my page |
 | GET | `/api/player/stats/games/{game_id}` | my record in one game (404 if I didn't play it) |
-| GET | `/api/player/stats/players/{id}` | another player's totals, opened from the leaderboard (playername only; 404 if they haven't played) |
+| GET | `/api/player/stats/players/{id}` | another player's totals, opened from the leaderboard (playername only; 404 if they haven't played), plus `details` |
 | GET | `/api/player/stats/players/{id}/games?page=&per_page=` | that player's game records |
 | GET | `/api/player/stats/players/{id}/games/{game_id}` | that player's record in one game |
+
+`details` (also on the admin panel's `GET /api/stats/players/{id}`; not on the leaderboards) is
+the personal report page over all games: `captures` and `hits_taken` (totals),
+`efficiency_kdr` (average per game), `max_combo` (best), `place_in_team` / `place_in_game`
+(`{best, average}`), `medals` (`[{name, count}]`, the nominations), and the 5 players tagged
+most (`victims`) and who tagged them most (`insulters`). Values are `null` when never recorded.
 
 Display names: the admin panel and the app show `points` as **Score**, `frags` as **Kills** and
 `deactivated` as **KIA**, and don't show the number of games; the API keeps the original fields.
 
-| GET | `/api/player/offers` | promotions live today: active and within their dates (business timezone), newest first. Plain array of `{id, title, description, starts_on, ends_on, …}` |
+| GET | `/api/player/offers` | promotions live today: active and within their dates (business timezone), newest first. Plain array of `{id, title, description, image_url, starts_on, ends_on, …}` (title/description may be empty; offers with neither text nor image are left out). The app shows them in the top bar and on the Offers tab |
 
 ### Payments (QNB, mobile app)
 

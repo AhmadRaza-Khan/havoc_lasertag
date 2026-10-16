@@ -65,3 +65,23 @@ pub struct GameRecordRow {
     pub victims: Json<Vec<NamedCount>>,
     pub insulters: Json<Vec<NamedCount>>,
 }
+
+/// A player's personal-page stats summed up over all their games.
+#[derive(Debug, Default, FromRow)]
+pub struct DetailsRow {
+    pub captures: Option<i64>,
+    pub hits_taken: Option<i64>,
+    pub efficiency_kdr: Option<f64>,
+    pub max_combo: Option<i32>,
+    pub best_place_in_team: Option<i32>,
+    pub avg_place_in_team: Option<f64>,
+    pub best_place_in_game: Option<i32>,
+    pub avg_place_in_game: Option<f64>,
+}
+
+/// A name with how often it occurred (medals, victims, insulters) across games.
+#[derive(Debug, FromRow, serde::Serialize)]
+pub struct Tally {
+    pub name: String,
+    pub count: i64,
+}

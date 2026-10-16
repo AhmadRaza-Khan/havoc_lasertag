@@ -6,6 +6,7 @@ import '@fontsource/rajdhani/700.css'
 import { formatDay } from '@/lib/format'
 import { useLeaderboard, usePlayerStanding } from '../hooks'
 import type { Standing } from '../types'
+import { PersonalStats } from '../components/PersonalStats'
 import { statIcons as icons } from '../icons'
 import '../stats.css'
 
@@ -60,11 +61,16 @@ export default function PlayerStatsPage() {
             </p>
           </header>
 
+          <h2 className="ps-section">
+            <span>All-time totals</span>
+          </h2>
           <section className="ps-bars" aria-label="All-time totals">
             {bars(s!, leaderboard.data ?? []).map((b, i) => (
               <StatBar key={b.label} bar={b} index={i} />
             ))}
           </section>
+
+          <PersonalStats details={s!.details} />
         </>
       )}
     </div>

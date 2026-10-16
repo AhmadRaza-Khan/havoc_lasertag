@@ -13,6 +13,7 @@ use crate::{
         player_auth::AuthPlayer,
         players::{Player, repository as players},
     },
+    shared::image::sniff,
     state::AppState,
 };
 
@@ -109,30 +110,6 @@ async fn me(state: &AppState, id: Uuid) -> AppResult<Player> {
     players::find_by_id(&state.db, id)
         .await?
         .ok_or_else(|| AppError::Unauthorized("Player no longer exists".into()))
-}
-
-/// The image type from its first bytes (magic numbers), or `None` if it isn't one we accept.
-fn sniff(bytes: &[u8]) -> Option<&'static str> {
-    match bytes {
-        [0xFF, 0xD8, 0xFF, ..] => Some("image/jpeg"),
-        [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, ..] => Some("image/png"),
-        [
-            b'R',
-            b'I',
-            b'F',
-            b'F',
-            _,
-            _,
-            _,
-            _,
-            b'W',
-            b'E',
-            b'B',
-            b'P',
-            ..,
-        ] => Some("image/webp"),
-        _ => None,
-    }
 }
 
 #[cfg(test)]

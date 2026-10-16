@@ -25,6 +25,7 @@ pub fn router(state: &AppState) -> Router<AppState> {
     let public = Router::new()
         .nest("/health", health::routes())
         .nest("/avatars", avatars::public_routes())
+        .nest("/offer-images", offers::public_routes())
         .nest("/auth", auth::routes())
         .nest("/player/auth", player_auth::routes())
         // Bookeo's calls; authenticated by their signature.

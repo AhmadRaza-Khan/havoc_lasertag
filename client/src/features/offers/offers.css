@@ -51,3 +51,86 @@
   font-size: 0.8rem;
   font-weight: 400;
 }
+
+/* Offers with images */
+
+.offer-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.offer-thumb {
+  flex: none;
+  width: 72px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+
+.offer-kind {
+  font-size: 0.75rem;
+}
+
+.offer-form-hint {
+  margin: 0;
+}
+
+.offer-image-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.offer-image-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 22px 16px;
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.offer-image-drop:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--row-hover);
+}
+
+.offer-image-drop svg {
+  color: var(--accent);
+}
+
+.offer-image-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.offer-image-preview img {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.offer-image-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.offer-image-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

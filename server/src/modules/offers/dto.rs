@@ -1,10 +1,7 @@
 use chrono::NaiveDate;
 use serde::Deserialize;
 
-use crate::{
-    error::{AppError, AppResult},
-    shared::validation::required_text,
-};
+use crate::error::{AppError, AppResult};
 
 const MAX_TITLE: usize = 120;
 const MAX_DESCRIPTION: usize = 2000;
@@ -17,10 +14,13 @@ pub struct ListQuery {
     pub per_page: Option<i64>,
 }
 
-/// Body for both create (POST) and update (PUT).
+/// Body for both create (POST) and update (PUT). Title and description are optional: an
+/// offer can be text, an image (uploaded separately), or both.
 #[derive(Debug, Deserialize)]
 pub struct OfferInput {
+    #[serde(default)]
     pub title: String,
+    #[serde(default)]
     pub description: String,
     #[serde(default = "default_active")]
     pub is_active: bool,
@@ -42,16 +42,22 @@ pub struct ValidOffer {
     pub ends_on: Option<NaiveDate>,
 }
 
+impl ValidOffer {
+    pub fn has_text(&self) -> bool {
+        !self.title.is_empty() || !self.description.is_empty()
+    }
+}
+
 impl OfferInput {
     pub fn validate(self) -> AppResult<ValidOffer> {
-        let title = required_text("Title", &self.title)?;
+        let title = self.title.trim().to_string();
         if title.chars().count() > MAX_TITLE {
             return Err(AppError::BadRequest(format!(
                 "Title must be at most {MAX_TITLE} characters"
             )));
         }
 
-        let description = required_text("Description", &self.description)?;
+        let description = self.description.trim().to_string();
         if description.chars().count() > MAX_DESCRIPTION {
             return Err(AppError::BadRequest(format!(
                 "Description must be at most {MAX_DESCRIPTION} characters"
@@ -98,9 +104,15 @@ mod tests {
     }
 
     #[test]
-    fn rejects_blank_and_too_long() {
+    fn text_is_optional_but_limited() {
         let mut i = input(None, None);
         i.title = "  ".into();
+        i.description = String::new();
+        let o = i.validate().unwrap();
+        assert!(!o.has_text(), "an image-only offer");
+
+        let mut i = input(None, None);
+        i.title = "x".repeat(MAX_TITLE + 1);
         assert!(i.validate().is_err());
 
         let mut i = input(None, None);

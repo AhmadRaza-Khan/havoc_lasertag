@@ -1,12 +1,16 @@
 export type Offer = {
   id: string
+  /** May be empty: an offer can be just an image. */
   title: string
+  /** May be empty. */
   description: string
   is_active: boolean
   /** First day it shows (YYYY-MM-DD, venue date), or null for no start limit. */
   starts_on: string | null
   /** Last day it shows, inclusive, or null if it never expires. */
   ends_on: string | null
+  /** API path of its image, or null if it has none. */
+  image_url: string | null
   created_at: string
   updated_at: string
 }

@@ -1,5 +1,5 @@
 import { apiRequest } from '@/lib/api-client'
-import type { Standing, StatImport } from './types'
+import type { PlayerStats, Standing, StatImport } from './types'
 
 export const statsApi = {
   /** Starts an import; it's processed in the background (poll `getImport`). */
@@ -11,5 +11,5 @@ export const statsApi = {
   getImport: (id: string) => apiRequest<StatImport>(`/stats/imports/${id}`),
   recentImports: () => apiRequest<StatImport[]>('/stats/imports'),
   leaderboard: () => apiRequest<Standing[]>('/stats/leaderboard'),
-  playerStanding: (id: string) => apiRequest<Standing>(`/stats/players/${id}`),
+  playerStanding: (id: string) => apiRequest<PlayerStats>(`/stats/players/${id}`),
 }

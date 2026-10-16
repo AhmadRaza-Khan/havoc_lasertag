@@ -1,6 +1,7 @@
 //! Cross-cutting helpers used by several feature modules.
 
 pub mod html;
+pub mod image;
 pub mod jwt;
 pub mod login_throttle;
 pub mod ocr;

@@ -30,3 +30,29 @@ export type Standing = {
   accuracy: number
   last_played_at: string | null
 }
+
+/** A name and how often it came up across games (medals, victims, insulters). */
+export type Tally = { name: string; count: number }
+
+/** Stats from the players' own report pages, over all their games (`null`: never recorded). */
+export type PlayerDetails = {
+  /** Total captures. */
+  captures: number | null
+  /** Total hits taken. */
+  hits_taken: number | null
+  /** Average "Efficiency KDR" per game. */
+  efficiency_kdr: number | null
+  /** Best "Max COMBO". */
+  max_combo: number | null
+  place_in_team: { best: number; average: number } | null
+  place_in_game: { best: number; average: number } | null
+  /** Medals ("nominations") won, most first. */
+  medals: Tally[]
+  /** Players they tagged most ("My victims"). */
+  victims: Tally[]
+  /** Players who tagged them most ("My insulters"). */
+  insulters: Tally[]
+}
+
+/** One player's totals and personal-page stats (`GET /stats/players/{id}`). */
+export type PlayerStats = Standing & { details: PlayerDetails }

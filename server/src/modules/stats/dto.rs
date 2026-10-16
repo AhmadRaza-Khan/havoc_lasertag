@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use super::{
     import::NamedCount,
-    model::{GameRecordRow, ImportRow, StandingRow},
+    model::{DetailsRow, GameRecordRow, ImportRow, StandingRow, Tally},
 };
 
 #[derive(Debug, Serialize)]
@@ -176,6 +176,79 @@ pub struct MyStats {
     #[serde(flatten)]
     pub standing: Standing,
     pub total_players: i64,
+    pub details: PlayerDetails,
+}
+
+/// One player's totals plus their personal-page stats (admin panel).
+#[derive(Debug, Serialize)]
+pub struct PlayerStats {
+    #[serde(flatten)]
+    pub standing: Standing,
+    pub details: PlayerDetails,
+}
+
+/// Another player's totals plus their personal-page stats (mobile app; playername only).
+#[derive(Debug, Serialize)]
+pub struct PublicPlayerStats {
+    #[serde(flatten)]
+    pub standing: PublicStanding,
+    pub details: PlayerDetails,
+}
+
+/// The stats from the players' own report pages, over all their games. `null` when no game
+/// had that value (e.g. the personal page was missing).
+#[derive(Debug, Serialize)]
+pub struct PlayerDetails {
+    /// Total "Captures" (additional devices captured).
+    pub captures: Option<i64>,
+    /// Total "Hit taken".
+    pub hits_taken: Option<i64>,
+    /// Average "Efficiency KDR" per game, two decimals.
+    pub efficiency_kdr: Option<f64>,
+    /// Best "Max COMBO".
+    pub max_combo: Option<i32>,
+    pub place_in_team: Option<Placement>,
+    pub place_in_game: Option<Placement>,
+    /// Medals won ("nominations"), most first.
+    pub medals: Vec<Tally>,
+    /// Players tagged most ("My victims").
+    pub victims: Vec<Tally>,
+    /// Players who tagged them most ("My insulters").
+    pub insulters: Vec<Tally>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Placement {
+    pub best: i32,
+    /// One decimal.
+    pub average: f64,
+}
+
+impl PlayerDetails {
+    pub fn new(
+        d: DetailsRow,
+        medals: Vec<Tally>,
+        victims: Vec<Tally>,
+        insulters: Vec<Tally>,
+    ) -> Self {
+        let place = |best: Option<i32>, avg: Option<f64>| {
+            Some(Placement {
+                best: best?,
+                average: (avg? * 10.0).round() / 10.0,
+            })
+        };
+        Self {
+            captures: d.captures,
+            hits_taken: d.hits_taken,
+            efficiency_kdr: d.efficiency_kdr.map(|v| (v * 100.0).round() / 100.0),
+            max_combo: d.max_combo,
+            place_in_team: place(d.best_place_in_team, d.avg_place_in_team),
+            place_in_game: place(d.best_place_in_game, d.avg_place_in_game),
+            medals,
+            victims,
+            insulters,
+        }
+    }
 }
 
 /// Everything recorded for one player in one game.

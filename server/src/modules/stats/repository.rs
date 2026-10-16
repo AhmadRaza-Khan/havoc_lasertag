@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use super::{
     import::ParsedGame,
-    model::{GameRecordRow, ImportRow, StandingRow},
+    model::{DetailsRow, GameRecordRow, ImportRow, StandingRow, Tally},
 };
 
 // ---------------------------------------------------------------------------
@@ -316,4 +316,69 @@ pub async fn player_record(
     .bind(game_id)
     .fetch_optional(db)
     .await
+}
+
+// ---------------------------------------------------------------------------
+// Personal stats across all of a player's games
+// ---------------------------------------------------------------------------
+
+/// Captures and hits taken are summed, max combo is the best, places are the best and the
+/// average, efficiency KDR the average per game. Games without a personal page don't count.
+pub async fn details(db: &PgPool, player_id: Uuid) -> sqlx::Result<DetailsRow> {
+    sqlx::query_as(
+        "SELECT SUM(captures)::bigint AS captures,
+                SUM(hits_taken)::bigint AS hits_taken,
+                AVG(efficiency_kdr) AS efficiency_kdr,
+                MAX(max_combo) AS max_combo,
+                MIN(place_in_team) AS best_place_in_team,
+                AVG(place_in_team)::float8 AS avg_place_in_team,
+                MIN(place_in_game) AS best_place_in_game,
+                AVG(place_in_game)::float8 AS avg_place_in_game
+         FROM game_players WHERE player_id = $1",
+    )
+    .bind(player_id)
+    .fetch_one(db)
+    .await
+}
+
+/// Medals ("nominations") and how many times each was won, most first.
+pub async fn medals(db: &PgPool, player_id: Uuid) -> sqlx::Result<Vec<Tally>> {
+    sqlx::query_as(
+        "SELECT n AS name, COUNT(*)::bigint AS count
+         FROM game_players gp, unnest(gp.nominations) AS n
+         WHERE gp.player_id = $1
+         GROUP BY n ORDER BY count DESC, n",
+    )
+    .bind(player_id)
+    .fetch_all(db)
+    .await
+}
+
+/// Who the player tagged (`victims`) or was tagged by (`insulters`) most, over all games.
+pub async fn rivals(
+    db: &PgPool,
+    player_id: Uuid,
+    which: Rivals,
+    limit: i64,
+) -> sqlx::Result<Vec<Tally>> {
+    let column = match which {
+        Rivals::Victims => "victims",
+        Rivals::Insulters => "insulters",
+    };
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT r->>'name' AS name, SUM(COALESCE((r->>'count')::int, 1))::bigint AS count
+         FROM game_players gp, jsonb_array_elements(gp.{column}) AS r
+         WHERE gp.player_id = $1 AND COALESCE(r->>'name', '') <> ''
+         GROUP BY 1 ORDER BY count DESC, name LIMIT $2"
+    )))
+    .bind(player_id)
+    .bind(limit)
+    .fetch_all(db)
+    .await
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Rivals {
+    Victims,
+    Insulters,
 }

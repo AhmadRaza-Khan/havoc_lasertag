@@ -7,7 +7,9 @@ use axum::{
 use uuid::Uuid;
 
 use super::{
-    dto::{GameRecord, Leaderboard, MyStats, PageQuery, PublicStanding, Standing},
+    dto::{
+        GameRecord, Leaderboard, MyStats, PageQuery, PublicPlayerStats, PublicStanding, Standing,
+    },
     repository, service,
 };
 use crate::{
@@ -27,6 +29,7 @@ pub async fn summary(
     Ok(Json(MyStats {
         standing: Standing::from_row(standing, state.config.bookeo.timezone),
         total_players,
+        details: service::player_details(&state, player.id).await?,
     }))
 }
 
@@ -59,13 +62,16 @@ pub async fn other_summary(
     State(state): State<AppState>,
     player: AuthPlayer,
     Path(id): Path<Uuid>,
-) -> AppResult<Json<PublicStanding>> {
+) -> AppResult<Json<PublicPlayerStats>> {
     let row = repository::standing(&state.db, id)
         .await?
         .ok_or_else(|| AppError::NotFound("Player not found".into()))?;
-    PublicStanding::from_row(row, state.config.bookeo.timezone, player.id)
-        .map(Json)
-        .ok_or_else(|| AppError::NotFound("This player hasn't played yet".into()))
+    let standing = PublicStanding::from_row(row, state.config.bookeo.timezone, player.id)
+        .ok_or_else(|| AppError::NotFound("This player hasn't played yet".into()))?;
+    Ok(Json(PublicPlayerStats {
+        standing,
+        details: service::player_details(&state, id).await?,
+    }))
 }
 
 /// Another player's game records, newest first.

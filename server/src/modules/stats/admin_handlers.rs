@@ -8,7 +8,7 @@ use axum::{
 use uuid::Uuid;
 
 use super::{
-    dto::{GameRecord, ImportResponse, PageQuery, Standing},
+    dto::{GameRecord, ImportResponse, PageQuery, PlayerStats, Standing},
     repository, service,
 };
 use crate::{
@@ -91,11 +91,14 @@ pub async fn leaderboard(State(state): State<AppState>) -> AppResult<Json<Vec<St
 pub async fn player_standing(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-) -> AppResult<Json<Standing>> {
+) -> AppResult<Json<PlayerStats>> {
     let row = repository::standing(&state.db, id)
         .await?
         .ok_or_else(|| AppError::NotFound("Player not found".into()))?;
-    Ok(Json(Standing::from_row(row, state.config.bookeo.timezone)))
+    Ok(Json(PlayerStats {
+        standing: Standing::from_row(row, state.config.bookeo.timezone),
+        details: service::player_details(&state, id).await?,
+    }))
 }
 
 /// One player's game records with everything from the reports, newest first.

@@ -7,6 +7,7 @@ use tokio::sync::Semaphore;
 use uuid::Uuid;
 
 use super::{
+    dto::PlayerDetails,
     import::{self, ImportError},
     model::{GameRecordRow, ImportRow, StandingRow},
     repository::{self, SaveOutcome},
@@ -125,6 +126,30 @@ pub async fn player_standing(state: &AppState, player_id: Uuid) -> AppResult<Sta
     repository::standing(&state.db, player_id)
         .await?
         .ok_or_else(|| AppError::Unauthorized("Player no longer exists".into()))
+}
+
+/// Most-tagged / tagged-by players listed with the details.
+const RIVALS_SHOWN: i64 = 5;
+
+/// A player's personal-page stats over all their games.
+pub async fn player_details(state: &AppState, player_id: Uuid) -> AppResult<PlayerDetails> {
+    let (details, medals, victims, insulters) = tokio::try_join!(
+        repository::details(&state.db, player_id),
+        repository::medals(&state.db, player_id),
+        repository::rivals(
+            &state.db,
+            player_id,
+            repository::Rivals::Victims,
+            RIVALS_SHOWN
+        ),
+        repository::rivals(
+            &state.db,
+            player_id,
+            repository::Rivals::Insulters,
+            RIVALS_SHOWN
+        ),
+    )?;
+    Ok(PlayerDetails::new(details, medals, victims, insulters))
 }
 
 pub async fn player_records(
