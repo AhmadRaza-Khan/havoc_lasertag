@@ -13,6 +13,7 @@ chrono-tz = "0.10.4"
 dotenvy = "0.15.7"
 futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
 hex = "0.4.3"
+hmac = "0.13"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
 jsonwebtoken = { version = "11.1.0", features = ["rust_crypto"] }
 lopdf = "0.42"

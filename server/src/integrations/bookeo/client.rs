@@ -9,7 +9,8 @@ use serde::{Serialize, de::DeserializeOwned};
 use tokio::sync::RwLock;
 
 use super::types::{
-    Booking, Customer, NewBooking, NewCustomer, NewPayment, Page, Payment, Product, Slot,
+    Booking, Customer, NewBooking, NewCustomer, NewPayment, NewWebhook, Page, Payment, Product,
+    Slot, Webhook,
 };
 use crate::{config::BookeoConfig, error::AppError};
 
@@ -214,6 +215,18 @@ impl BookeoClient {
             )
             .await?;
         self.created_resource(res).await
+    }
+
+    /// Webhooks registered for this API key, with their delivery status.
+    pub async fn webhooks(&self) -> BookeoResult<Vec<Webhook>> {
+        self.get_all_pages("/webhooks", &[]).await
+    }
+
+    /// Registers a webhook; Bookeo replaces any existing one for the same domain and type.
+    pub async fn create_webhook(&self, webhook: &NewWebhook<'_>) -> BookeoResult<()> {
+        self.send(self.request(Method::POST, "/webhooks").json(webhook))
+            .await?;
+        Ok(())
     }
 
     // --- internals ---

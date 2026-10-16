@@ -60,6 +60,8 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     // Confirms payments, records them in Bookeo and cancels overdue unpaid bookings.
     tokio::spawn(modules::payments::worker::run(state.clone()));
+    // Bookings canceled in Bookeo are canceled here too (when BOOKEO_WEBHOOK_URL is set).
+    tokio::spawn(modules::webhooks::register(state.clone()));
     let app = app::build(state)?;
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;

@@ -44,6 +44,12 @@ pub struct BookeoConfig {
     pub base_url: String,
     /// The business's local timezone: "today" and date ranges are evaluated in it.
     pub timezone: Tz,
+    /// Public URL of our "booking canceled" webhook, e.g.
+    /// `https://api.example.com/api/webhooks/bookeo/bookings-deleted`. When set, the server
+    /// registers it with Bookeo at startup and accepts its calls; unset turns the webhook off.
+    /// Leave it unset on local/dev servers: Bookeo keeps one webhook per API key, so a dev
+    /// server registering its URL would take the webhook away from production.
+    pub webhook_url: Option<String>,
 }
 
 impl Config {
@@ -82,11 +88,27 @@ impl Config {
                     .unwrap_or_else(|_| "Asia/Qatar".into())
                     .parse()
                     .map_err(|_| "BOOKEO_TIMEZONE must be an IANA timezone, e.g. Asia/Qatar")?,
+                webhook_url: webhook_url()?,
             },
             qnb: qnb_config()?,
             email: email_config()?,
         })
     }
+}
+
+/// `BOOKEO_WEBHOOK_URL`, if set. Bookeo only calls https URLs.
+fn webhook_url() -> Result<Option<String>, String> {
+    let Some(url) = env::var("BOOKEO_WEBHOOK_URL")
+        .ok()
+        .map(|u| u.trim().to_string())
+        .filter(|u| !u.is_empty())
+    else {
+        return Ok(None);
+    };
+    if !url.starts_with("https://") {
+        return Err("BOOKEO_WEBHOOK_URL must be an https URL (Bookeo only calls https)".into());
+    }
+    Ok(Some(url))
 }
 
 /// All of the QNB variables, or none of them.

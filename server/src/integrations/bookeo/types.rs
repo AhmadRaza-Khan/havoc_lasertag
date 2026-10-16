@@ -281,3 +281,41 @@ pub struct PeopleNumber {
     pub people_category_id: String,
     pub number: i32,
 }
+
+/// A webhook registered with Bookeo (`GET /webhooks`).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Webhook {
+    pub id: Option<String>,
+    pub url: String,
+    pub domain: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+    /// Set when Bookeo stopped calling it (unreachable for over 24 h); register it again.
+    pub blocked_time: Option<String>,
+    pub blocked_reason: Option<String>,
+    /// Set while Bookeo is backing off after failed deliveries.
+    pub no_delivery_before: Option<String>,
+    pub delivery_delay_reason: Option<String>,
+}
+
+/// `POST /webhooks`: replaces any webhook for the same domain and type on this API key.
+#[derive(Debug, Serialize)]
+pub struct NewWebhook<'a> {
+    pub url: &'a str,
+    /// e.g. "bookings"
+    pub domain: &'a str,
+    /// "created", "updated" or "deleted"
+    #[serde(rename = "type")]
+    pub kind: &'a str,
+}
+
+/// What Bookeo POSTs to a webhook URL.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebhookMessage {
+    /// For bookings, the booking number.
+    pub item_id: Option<String>,
+    /// The item as `GET /bookings/{itemId}` returns it (may be absent if it was deleted).
+    pub item: Option<serde_json::Value>,
+}

@@ -23,6 +23,16 @@ pub fn player_routes() -> Router<AppState> {
         .merge(crate::modules::payments::player_booking_routes())
 }
 
+/// A booking was canceled in Bookeo (webhook): cancel ours. `true` if it changed one.
+pub async fn canceled_in_bookeo(
+    state: &AppState,
+    booking_number: &str,
+) -> crate::error::AppResult<bool> {
+    Ok(service::canceled_in_bookeo(state, booking_number)
+        .await?
+        .is_some())
+}
+
 /// Cancels an app booking that wasn't paid in time (frees its seats in Bookeo).
 pub async fn cancel_for_nonpayment(
     state: &AppState,

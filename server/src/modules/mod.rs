@@ -14,6 +14,7 @@ pub mod players;
 pub mod push;
 pub mod stats;
 pub mod users;
+pub mod webhooks;
 
 use axum::Router;
 
@@ -26,6 +27,8 @@ pub fn router(state: &AppState) -> Router<AppState> {
         .nest("/avatars", avatars::public_routes())
         .nest("/auth", auth::routes())
         .nest("/player/auth", player_auth::routes())
+        // Bookeo's calls; authenticated by their signature.
+        .nest("/webhooks", webhooks::routes())
         // Authenticates itself: WebSocket clients may pass the token as a query parameter.
         .nest("/player/chats", chats::ws_routes());
 

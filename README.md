@@ -49,6 +49,7 @@ shared/          cross-module helpers: validation, password hashing, JWT, pagina
 integrations/
   bookeo/        typed Bookeo API client (products cache, slots, customers, bookings, payments)
   qnb/           QNB payment gateway client (Pay by Link, transaction inquiry, link cancel)
+  (modules/webhooks/  Bookeo's signed calls: bookings canceled in Bookeo)
   email.rs       SMTP2GO mailer
 modules/
   mod.rs         mounts every module's routes under /api (public / admin-only / player-only groups)
@@ -226,6 +227,26 @@ are paid right away; if staff deny one, refund it from the QNB merchant console.
 Emails (SMTP2GO): payment due (pay later, with link), payment received, canceled for non-payment.
 Customers without an email address get none.
 
+### Bookeo webhook (bookings canceled in Bookeo)
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/api/webhooks/bookeo/bookings-deleted` | called by Bookeo (no token): a booking was canceled or deleted in Bookeo → the matching booking here is marked `canceled`. 204 when handled (also for bookings that aren't ours or are already canceled); 401 if the signature is wrong or the timestamp is more than 5 min off; 404 when `BOOKEO_WEBHOOK_URL` isn't set |
+
+Bookeo signs each call: `X-Bookeo-Signature` = hex HMAC-SHA256, keyed with the Bookeo
+**secret key** (`BOOKEO_SECRET_KEY`), of `X-Bookeo-Timestamp` + `X-Bookeo-MessageId` + the
+webhook URL exactly as registered + the raw body. Nothing is sent back to Bookeo (the seats are
+already free there); if the booking had an open QNB payment link, the payments worker closes
+it within a minute. Repeat deliveries are harmless.
+
+Set `BOOKEO_WEBHOOK_URL` to the public URL of the endpoint (production only). At startup the
+server **adds** the "bookings / deleted" webhook to the Bookeo API key if it isn't there yet. It
+never removes or replaces webhooks: the others on the key (bookings created/updated, payments
+created → `havoc.cyberboost.io`) are left alone, and if a "bookings / deleted" webhook already
+points elsewhere it is kept and an error is logged. Bookeo delivers all webhooks of an API key in
+one queue, so a failing endpoint delays the others too; blocked or delayed webhooks are logged at
+startup.
+
 ### Game statistics (PDF import)
 
 The arena exports a report per game (`Total_statistic_HH:MM.pdf`). Page 1 is a text table
@@ -292,6 +313,9 @@ Booking `status` is `pending` (awaiting staff approval — all current games hav
 
 - `server/.env`: `COOKIE_SECURE=true`, `CORS_ORIGINS=https://<domain>`, `BIND_ADDR=127.0.0.1:8080` behind nginx,
   plus `BOOKEO_API_KEY`, `BOOKEO_SECRET_KEY`, `BOOKEO_TIMEZONE` (see `server/.env.example`).
+- `BOOKEO_WEBHOOK_URL=https://<api domain>/api/webhooks/bookeo/bookings-deleted` syncs bookings
+  canceled in Bookeo (see "Bookeo webhook"). Production only: never set it on a dev server that
+  uses the production Bookeo keys.
 - Payments: `QNB_BASE_URL` (production URL from QNB), `QNB_USER_ID`, `QNB_MERCHANT_ID`,
   `QNB_MERCHANT_PWD`, `QNB_MERCHANT_KEY` (API password/key: "Merchant API Details" in the QNB
   merchant console). Without them online payment is off. Emails: `SMTP2GO_API_KEY` and

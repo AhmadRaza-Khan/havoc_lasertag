@@ -246,6 +246,21 @@ pub async fn cancel(state: &AppState, id: Uuid, actor: Actor) -> AppResult<Booki
     Ok(repository::set_status(&state.db, id, "canceled").await?)
 }
 
+/// The booking was canceled (or deleted) in Bookeo, e.g. by staff in Bookeo's dashboard:
+/// mark ours canceled too. Bookeo already freed the seats, so nothing is sent back to it; an
+/// open payment link is closed by the payments worker. Returns the booking if this changed
+/// it (`None`: not one of ours, or already canceled — Bookeo also reports our own cancels).
+pub async fn canceled_in_bookeo(
+    state: &AppState,
+    booking_number: &str,
+) -> AppResult<Option<BookingRow>> {
+    let row = repository::cancel_by_booking_number(&state.db, booking_number).await?;
+    if let Some(r) = &row {
+        tracing::info!(booking_id = %r.id, booking_number, "booking canceled in bookeo");
+    }
+    Ok(row)
+}
+
 // ---------------------------------------------------------------------------
 // Read
 // ---------------------------------------------------------------------------

@@ -171,6 +171,22 @@ pub async fn find(
     .await
 }
 
+/// Marks the booking with this Bookeo number canceled. `None` if there's no such booking or
+/// it was already canceled.
+pub async fn cancel_by_booking_number(
+    db: &PgPool,
+    booking_number: &str,
+) -> sqlx::Result<Option<BookingRow>> {
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "UPDATE bookings AS b SET status = 'canceled', updated_at = now()
+         WHERE b.bookeo_booking_number = $1 AND b.status <> 'canceled'
+         RETURNING {COLUMNS}"
+    )))
+    .bind(booking_number)
+    .fetch_optional(db)
+    .await
+}
+
 pub async fn find_with_player(db: &PgPool, id: Uuid) -> sqlx::Result<Option<BookingWithPlayer>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {COLUMNS}, {PLAYER_COLUMNS}
