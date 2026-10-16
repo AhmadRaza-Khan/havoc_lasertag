@@ -39,6 +39,7 @@ pub fn router(state: &AppState) -> Router<AppState> {
         .nest("/bookings", bookings::admin_routes())
         .nest("/stats", stats::admin_routes())
         .nest("/offers", offers::admin_routes())
+        .nest("/chats", chats::admin_routes())
         .nest("/settings", payments::admin_routes())
         .route_layer(auth::require_auth(state));
 

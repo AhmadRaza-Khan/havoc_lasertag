@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router'
 import { AdminLayout } from '@/components/layout/AdminLayout'
 import { GuestRoute, LoginPage, ProtectedRoute } from '@/features/auth'
 import { BookingFormPage, BookingsPage } from '@/features/bookings'
+import { ChatsPage } from '@/features/chats'
 import { DashboardPage } from '@/features/dashboard'
 import { OffersPage } from '@/features/offers'
 import { PlayersPage } from '@/features/players'
@@ -24,6 +25,7 @@ export function AppRoutes() {
           <Route path="/bookings" element={<BookingsPage />} />
           <Route path="/bookings/new" element={<BookingFormPage />} />
           <Route path="/bookings/:id/edit" element={<BookingFormPage />} />
+          <Route path="/chats" element={<ChatsPage />} />
           <Route path="/offers" element={<OffersPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>

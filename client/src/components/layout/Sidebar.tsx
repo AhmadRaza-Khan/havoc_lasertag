@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from 'react-router'
 import { LogOut } from 'lucide-react'
 import type { NavItem } from '@/app/navigation'
 import { useAuth } from '@/features/auth'
+import { ChatUnreadBadge } from '@/features/chats'
 
 export function Sidebar({ items }: { items: NavItem[] }) {
   const { user, logout } = useAuth()
@@ -28,6 +29,7 @@ export function Sidebar({ items }: { items: NavItem[] }) {
           >
             <Icon size={18} aria-hidden="true" />
             <span>{label}</span>
+            {to === '/chats' && <ChatUnreadBadge />}
           </NavLink>
         ))}
       </nav>

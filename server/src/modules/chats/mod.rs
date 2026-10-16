@@ -1,9 +1,11 @@
-//! Private one-to-one chat between players (mobile app only).
+//! Private one-to-one chat between players (mobile app), and staff chatting with players
+//! as the "Havoc Admin" player from the admin panel (`admin_routes`).
 //!
 //! - REST (`routes`) loads players, conversations and history, and can send/mark read.
 //! - The WebSocket (`ws_routes`) delivers messages, typing, read receipts and presence live.
 //! - `hub` tracks live connections in memory; messages persist in Postgres.
 
+mod admin_handlers;
 mod dto;
 mod events;
 mod handlers;
@@ -33,6 +35,21 @@ pub fn routes() -> Router<AppState> {
             get(handlers::messages).post(handlers::send),
         )
         .route("/conversations/{player_id}/read", post(handlers::read))
+}
+
+/// Admin panel routes (chat as "Havoc Admin"); mounted at `/chats` behind `auth::require_auth`.
+pub fn admin_routes() -> Router<AppState> {
+    Router::new()
+        .route("/players", get(admin_handlers::players))
+        .route("/conversations", get(admin_handlers::conversations))
+        .route(
+            "/conversations/{player_id}/messages",
+            get(admin_handlers::messages).post(admin_handlers::send),
+        )
+        .route(
+            "/conversations/{player_id}/read",
+            post(admin_handlers::read),
+        )
 }
 
 /// The WebSocket authenticates itself (header or `?token=`), so it's mounted outside the

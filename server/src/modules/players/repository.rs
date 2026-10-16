@@ -14,21 +14,23 @@ pub async fn list(
         "SELECT id, full_name, playername, phone, email, created_at, updated_at,
                 CASE WHEN avatar_updated_at IS NULL THEN NULL ELSE '/api/avatars/' || id || '?v=' || floor(extract(epoch FROM avatar_updated_at) * 1000)::bigint END AS avatar_url
          FROM players
-         WHERE $1::text IS NULL OR playername ILIKE $1 OR full_name ILIKE $1
+         WHERE id <> $4 AND ($1::text IS NULL OR playername ILIKE $1 OR full_name ILIKE $1)
          ORDER BY created_at DESC
          LIMIT $2 OFFSET $3",
     )
     .bind(pattern)
     .bind(limit)
     .bind(offset)
+    .bind(super::HAVOC_ADMIN_ID)
     .fetch_all(db)
     .await?;
 
     let total = sqlx::query_scalar(
         "SELECT COUNT(*) FROM players
-         WHERE $1::text IS NULL OR playername ILIKE $1 OR full_name ILIKE $1",
+         WHERE id <> $2 AND ($1::text IS NULL OR playername ILIKE $1 OR full_name ILIKE $1)",
     )
     .bind(pattern)
+    .bind(super::HAVOC_ADMIN_ID)
     .fetch_one(db)
     .await?;
 
@@ -108,8 +110,10 @@ pub async fn find_credentials(
     db: &PgPool,
     playername: &str,
 ) -> sqlx::Result<Option<(Uuid, String)>> {
-    sqlx::query_as("SELECT id, password_hash FROM players WHERE playername = $1")
+    // The Havoc Admin account never signs in.
+    sqlx::query_as("SELECT id, password_hash FROM players WHERE playername = $1 AND id <> $2")
         .bind(playername)
+        .bind(super::HAVOC_ADMIN_ID)
         .fetch_optional(db)
         .await
 }

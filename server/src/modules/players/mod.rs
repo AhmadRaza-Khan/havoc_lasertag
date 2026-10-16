@@ -12,8 +12,13 @@ pub use model::Player;
 pub use service::{check_playername, signup};
 
 use axum::{Router, routing::get};
+use uuid::Uuid;
 
 use crate::state::AppState;
+
+/// The "Havoc Admin" player (migration 0013): staff chat with players as this account from
+/// the admin panel. It can't sign in and isn't listed with the other players.
+pub const HAVOC_ADMIN_ID: Uuid = Uuid::from_u128(0xad01);
 
 /// Admin-only routes; mounted behind `auth::require_auth` in `modules::router`.
 pub fn routes() -> Router<AppState> {

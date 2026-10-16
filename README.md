@@ -270,6 +270,22 @@ Efficiency KDR, victims and insulters).
 Regression test on a real report (not in CI, needs the file):
 `STATS_PDF=/path/Total_statistic_17:43.pdf cargo test --release real_report -- --ignored`
 
+### Chats as Havoc Admin (admin panel)
+
+Staff chat with players from the panel's **Chats** page as the **Havoc Admin** player
+(`playername` `admin`, fixed id `00000000-0000-0000-0000-00000000ad01`, migration 0013). It's a
+normal player to the app — players see its messages, can find it and reply — but it can't sign
+in and is hidden from the panel's Players list (and can't be edited or deleted). All staff share
+this one inbox; the panel polls instead of using a socket.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/chats/conversations` | Havoc Admin's conversations, most recent first (with unread counts) |
+| GET | `/api/chats/players?search=&page=&per_page=` | every player, for starting a chat |
+| GET | `/api/chats/conversations/{player_id}/messages?before=&limit=` | history, newest first |
+| POST | `/api/chats/conversations/{player_id}/messages` | `{body}` → sent as Havoc Admin (live to the app, push if it's closed) |
+| POST | `/api/chats/conversations/{player_id}/read` | marks the player's messages read (they get the read receipt) |
+
 ### Chat (mobile app, player token)
 
 Private one-to-one chat between any two players. Messages persist in Postgres; delivery,

@@ -1,5 +1,10 @@
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
 
+/** A path the API returns (e.g. a player's `avatar_url`) as a full URL. */
+export function apiUrl(path: string): string {
+  return `${API_URL}${path}`
+}
+
 export class ApiError extends Error {
   status: number
 

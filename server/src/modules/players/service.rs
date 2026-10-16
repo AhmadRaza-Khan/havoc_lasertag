@@ -85,6 +85,9 @@ pub async fn check_playername(db: &PgPool, raw: &str) -> AppResult<String> {
 }
 
 pub async fn update(db: &PgPool, id: Uuid, input: PlayerInput) -> AppResult<Player> {
+    if id == super::HAVOC_ADMIN_ID {
+        return Err(not_found());
+    }
     let mut player = input.validate(false)?;
     let hash = match player.password.take() {
         Some(p) => Some(password::hash(p).await?),
@@ -98,6 +101,10 @@ pub async fn update(db: &PgPool, id: Uuid, input: PlayerInput) -> AppResult<Play
 }
 
 pub async fn delete(db: &PgPool, id: Uuid) -> AppResult<()> {
+    // The Havoc Admin chat account stays.
+    if id == super::HAVOC_ADMIN_ID {
+        return Err(not_found());
+    }
     if !repository::delete(db, id).await? {
         return Err(not_found());
     }
