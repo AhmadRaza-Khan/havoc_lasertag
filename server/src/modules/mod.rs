@@ -26,6 +26,8 @@ pub fn router(state: &AppState) -> Router<AppState> {
         .nest("/health", health::routes())
         .nest("/avatars", avatars::public_routes())
         .nest("/offer-images", offers::public_routes())
+        // The website's leaderboard (WordPress plugin); checks its own API key.
+        .nest("/website", stats::website_routes())
         .nest("/auth", auth::routes())
         .nest("/player/auth", player_auth::routes())
         // Bookeo's calls; authenticated by their signature.

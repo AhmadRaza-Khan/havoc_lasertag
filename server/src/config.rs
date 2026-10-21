@@ -15,6 +15,9 @@ pub struct Config {
     pub qnb: Option<QnbConfig>,
     /// SMTP2GO email. `None` logs emails instead of sending them.
     pub email: Option<EmailConfig>,
+    /// Key for the website's read-only leaderboard API (the WordPress plugin). `None` turns
+    /// that API off.
+    pub website_api_key: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -91,6 +94,7 @@ impl Config {
                 webhook_url: webhook_url()?,
             },
             qnb: qnb_config()?,
+            website_api_key: website_api_key()?,
             email: email_config()?,
         })
     }
@@ -109,6 +113,21 @@ fn webhook_url() -> Result<Option<String>, String> {
         return Err("BOOKEO_WEBHOOK_URL must be an https URL (Bookeo only calls https)".into());
     }
     Ok(Some(url))
+}
+
+/// `WEBSITE_API_KEY`, if set: a long random secret shared with the website plugin.
+fn website_api_key() -> Result<Option<String>, String> {
+    let Some(key) = env::var("WEBSITE_API_KEY")
+        .ok()
+        .map(|k| k.trim().to_string())
+        .filter(|k| !k.is_empty())
+    else {
+        return Ok(None);
+    };
+    if key.len() < 32 {
+        return Err("WEBSITE_API_KEY must be at least 32 characters".into());
+    }
+    Ok(Some(key))
 }
 
 /// All of the QNB variables, or none of them.

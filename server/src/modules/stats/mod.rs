@@ -11,6 +11,7 @@ mod model;
 mod player_handlers;
 mod repository;
 mod service;
+mod website_handlers;
 
 use axum::{
     Router,
@@ -21,6 +22,14 @@ use axum::{
 pub use service::{link_unclaimed_records, recover};
 
 use crate::state::AppState;
+
+/// The website's read-only leaderboard (WordPress plugin); authenticated by the site key, not a
+/// login. Mounted at `/website`.
+pub fn website_routes() -> Router<AppState> {
+    Router::new()
+        .route("/leaderboard", get(website_handlers::leaderboard))
+        .route("/players/{id}", get(website_handlers::player))
+}
 
 /// Admin panel routes; mounted behind `auth::require_auth`.
 pub fn admin_routes() -> Router<AppState> {
