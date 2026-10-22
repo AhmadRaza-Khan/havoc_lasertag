@@ -12,6 +12,7 @@ mod handlers;
 pub mod hub;
 mod model;
 mod repository;
+mod safety;
 mod service;
 mod ws;
 
@@ -35,6 +36,12 @@ pub fn routes() -> Router<AppState> {
             get(handlers::messages).post(handlers::send),
         )
         .route("/conversations/{player_id}/read", post(handlers::read))
+        .route(
+            "/players/{id}/block",
+            post(safety::block).delete(safety::unblock),
+        )
+        .route("/blocks", get(safety::blocks))
+        .route("/reports", post(safety::report))
 }
 
 /// Admin panel routes (chat as "Havoc Admin"); mounted at `/chats` behind `auth::require_auth`.
@@ -50,6 +57,8 @@ pub fn admin_routes() -> Router<AppState> {
             "/conversations/{player_id}/read",
             post(admin_handlers::read),
         )
+        .route("/reports", get(safety::admin_reports))
+        .route("/reports/{id}/resolve", post(safety::admin_resolve))
 }
 
 /// The WebSocket authenticates itself (header or `?token=`), so it's mounted outside the

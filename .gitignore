@@ -16,7 +16,6 @@ node_modules/
 client/dist/
 *.log
 
-QAT-QNB-01-IP_eCommerce_API_Specification_r6.1.pdf
 
 # Editors / OS
 .idea/
@@ -26,3 +25,6 @@ QAT-QNB-01-IP_eCommerce_API_Specification_r6.1.pdf
 
 # Mobile app (Expo): kept local, not pushed
 /mobile/
+/wordpress/
+SkipCashIntegrationManual.pdf
+

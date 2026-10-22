@@ -1,6 +1,6 @@
 import { apiRequest, toQueryString } from '@/lib/api-client'
 import type { Paginated } from '@/lib/api-client'
-import type { ChatMessage, ChatPlayer, Conversation, MessagesPage } from './types'
+import type { ChatMessage, ChatPlayer, ChatReport, Conversation, MessagesPage } from './types'
 
 // Staff chat with players as the "Havoc Admin" player.
 export const chatsApi = {
@@ -14,6 +14,8 @@ export const chatsApi = {
       method: 'POST',
       body: JSON.stringify({ body }),
     }),
+  reports: () => apiRequest<ChatReport[]>('/chats/reports?status=open'),
+  resolveReport: (id: string) => apiRequest<void>(`/chats/reports/${id}/resolve`, { method: 'POST' }),
   read: (playerId: string) =>
     apiRequest<{ read_at: string | null }>(`/chats/conversations/${playerId}/read`, { method: 'POST' }),
 }

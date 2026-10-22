@@ -61,7 +61,7 @@ pub fn payment_received(
         ),
         format!(
             "Payment reference: {}.",
-            p.ipg_txn_id.as_deref().unwrap_or(&p.merchant_txn_id)
+            p.visa_id.as_deref().unwrap_or(&p.merchant_txn_id)
         ),
         "See you at Havoc!".to_string(),
     ];

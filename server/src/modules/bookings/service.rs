@@ -91,7 +91,7 @@ pub async fn create(
     // With online payment on, our emails (payment due, receipt) replace Bookeo's confirmation:
     // an app booking isn't final until it's paid.
     let bookeo_emails =
-        player.email.is_some() && !(matches!(actor, Actor::Player) && state.qnb.is_some());
+        player.email.is_some() && !(matches!(actor, Actor::Player) && state.skipcash().is_some());
 
     let id = Uuid::new_v4();
     let booking = state

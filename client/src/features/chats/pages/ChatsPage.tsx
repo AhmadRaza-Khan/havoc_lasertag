@@ -7,8 +7,8 @@ import { SearchInput } from '@/components/ui/SearchInput'
 import { apiUrl } from '@/lib/api-client'
 import { formatDay, formatTime } from '@/lib/format'
 import { chatsApi } from '../api'
-import { useChatPlayers, useConversations, useMarkRead, useMessages, useSendMessage } from '../hooks'
-import type { ChatMessage, ChatPlayer, Conversation } from '../types'
+import { useChatPlayers, useConversations, useMarkRead, useMessages, useReports, useResolveReport, useSendMessage } from '../hooks'
+import type { ChatMessage, ChatPlayer, ChatReport, Conversation } from '../types'
 import '../chats.css'
 
 const MAX_CHARS = 2000
@@ -17,7 +17,9 @@ const MAX_CHARS = 2000
 export default function ChatsPage() {
   const [params, setParams] = useSearchParams()
   const selectedId = params.get('player')
-  const [tab, setTab] = useState<'chats' | 'players'>('chats')
+  const [tab, setTab] = useState<'chats' | 'players' | 'reports'>('chats')
+  const reports = useReports()
+  const openReports = reports.data?.length ?? 0
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   // The player picked from "All players" (they may have no conversation yet).
@@ -69,18 +71,36 @@ export default function ChatsPage() {
               >
                 All players
               </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === 'reports'}
+                className={`tab${tab === 'reports' ? ' active' : ''}`}
+                onClick={() => setTab('reports')}
+              >
+                Reports
+                {openReports > 0 && <span className="chats-unread chats-tab-badge">{openReports}</span>}
+              </button>
             </div>
-            <SearchInput
-              value={search}
-              onChange={(v) => {
-                setSearch(v)
-                setPage(1)
-              }}
-              placeholder="Search players"
-            />
+            {tab !== 'reports' && (
+              <SearchInput
+                value={search}
+                onChange={(v) => {
+                  setSearch(v)
+                  setPage(1)
+                }}
+                placeholder="Search players"
+              />
+            )}
           </div>
 
-          {tab === 'chats' ? (
+          {tab === 'reports' ? (
+            <ReportsList
+              onMessage={(id, playername) =>
+                open({ id, playername, full_name: playername, last_seen_at: null, avatar_url: null, online: false })
+              }
+            />
+          ) : tab === 'chats' ? (
             conversations.isPending ? (
               <p className="chats-empty muted">Loading chats…</p>
             ) : conversations.isError ? (
@@ -151,6 +171,55 @@ export default function ChatsPage() {
         </section>
       </div>
     </>
+  )
+}
+
+const REASON_LABEL: Record<ChatReport['reason'], string> = {
+  spam: 'Spam',
+  harassment: 'Harassment',
+  inappropriate: 'Inappropriate',
+  other: 'Other',
+}
+
+/** Open reports from players: what was reported and by whom; message the player or resolve. */
+function ReportsList({ onMessage }: { onMessage: (playerId: string, playername: string) => void }) {
+  const reports = useReports()
+  const resolve = useResolveReport()
+  if (reports.isPending) return <p className="chats-empty muted">Loading reports…</p>
+  if (reports.isError) return <p className="chats-empty error">{reports.error.message}</p>
+  if (reports.data.length === 0) return <p className="chats-empty muted">No open reports. Players report messages and players from the app.</p>
+  return (
+    <ul className="chats-items">
+      {reports.data.map((r) => (
+        <li key={r.id} className="chats-report">
+          <div className="chats-report-head">
+            <span className="chats-item-name">@{r.reported_playername}</span>
+            <span className={`badge chats-report-reason reason-${r.reason}`}>{REASON_LABEL[r.reason]}</span>
+          </div>
+          {r.message_body && <p className="chats-report-message">“{r.message_body}”</p>}
+          {r.details && <p className="chats-report-details">{r.details}</p>}
+          <p className="muted small chats-report-meta">
+            Reported by @{r.reporter_playername} · {stamp(r.created_at)}
+            {!r.reported_id && ' · account deleted'}
+          </p>
+          <div className="chats-report-actions">
+            {r.reported_id && (
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => onMessage(r.reported_id!, r.reported_playername)}>
+                Message player
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={resolve.isPending}
+              onClick={() => resolve.mutate(r.id)}
+            >
+              Mark resolved
+            </button>
+          </div>
+        </li>
+      ))}
+    </ul>
   )
 }
 

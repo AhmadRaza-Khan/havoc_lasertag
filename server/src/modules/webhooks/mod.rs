@@ -1,4 +1,5 @@
-//! Webhooks Bookeo calls when something changes on its side. For now: a booking canceled (or
+//! Webhooks: Bookeo calls when something changes on its side, and SkipCash reports payment
+//! results (handled in `modules::payments`). For now: a booking canceled (or
 //! deleted) in Bookeo, e.g. by staff in Bookeo's dashboard, is canceled here too.
 //!
 //! Bookeo signs every call (see `signature`) and retries until it gets a 2xx within 5 s, in
@@ -23,7 +24,13 @@ pub const BOOKINGS_DELETED_PATH: &str = "/api/webhooks/bookeo/bookings-deleted";
 
 /// Public routes (Bookeo authenticates with a signature, not a token); mounted at `/webhooks`.
 pub fn routes() -> Router<AppState> {
-    Router::new().route("/bookeo/bookings-deleted", post(handlers::bookings_deleted))
+    Router::new()
+        .route("/bookeo/bookings-deleted", post(handlers::bookings_deleted))
+        // SkipCash payment results (verified with the SkipCash webhook key).
+        .route(
+            "/skipcash",
+            post(crate::modules::payments::skipcash_webhook),
+        )
 }
 
 /// Adds our "bookings deleted" webhook to Bookeo if it isn't there yet, then reports if

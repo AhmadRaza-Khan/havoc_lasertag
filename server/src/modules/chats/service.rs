@@ -94,6 +94,9 @@ pub async fn send_message(
     if repository::find_player(&state.db, to).await?.is_none() {
         return Err(AppError::NotFound("Player not found".into()));
     }
+    if super::safety::blocked_between(&state.db, from, to).await? {
+        return Err(AppError::Forbidden("You can't message this player".into()));
+    }
 
     let message = repository::insert_message(&state.db, from, to, &body).await?;
 

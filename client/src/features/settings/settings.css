@@ -104,3 +104,96 @@
 .saved-note {
   margin: 0;
 }
+
+.settings-panel {
+  margin-top: 20px;
+}
+
+.settings-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.settings-section .notice {
+  margin-bottom: 0;
+}
+
+.settings-section .segmented {
+  align-self: flex-start;
+}
+
+.copy-field {
+  display: flex;
+  gap: 8px;
+}
+
+.copy-field input {
+  flex: 1;
+  color: var(--muted);
+}
+
+/* Remove sits apart from Save and Test. */
+.settings-remove {
+  margin-right: auto;
+  color: var(--danger);
+}
+
+.test-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 8px;
+}
+
+.test-result.test-ok {
+  background: var(--success-bg);
+}
+
+.test-result.test-failed {
+  background: var(--danger-bg);
+}
+
+.test-result > strong {
+  color: var(--success);
+}
+
+.test-result.test-failed > strong {
+  color: var(--danger);
+}
+
+.test-result ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.test-result li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.test-result li svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.test-result li svg[aria-label='Passed'] {
+  color: var(--success);
+}
+
+.test-result li svg[aria-label='Failed'] {
+  color: var(--danger);
+}
+
+.settings-section .field-hint {
+  font-size: 0.8rem;
+  font-weight: 400;
+}

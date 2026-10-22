@@ -11,25 +11,14 @@ pub struct Config {
     pub cors_origins: Vec<String>,
     pub cookie_secure: bool,
     pub bookeo: BookeoConfig,
-    /// QNB payment gateway. `None` turns online payment off: app bookings have nothing to pay.
-    pub qnb: Option<QnbConfig>,
+    /// `SKIPCASH_BASE_URL`: sends SkipCash calls here instead of SkipCash's own servers, for
+    /// testing against a mock. The credentials themselves are entered in the admin panel.
+    pub skipcash_base_url: Option<String>,
     /// SMTP2GO email. `None` logs emails instead of sending them.
     pub email: Option<EmailConfig>,
     /// Key for the website's read-only leaderboard API (the WordPress plugin). `None` turns
     /// that API off.
     pub website_api_key: Option<String>,
-}
-
-#[derive(Clone, Debug)]
-pub struct QnbConfig {
-    /// e.g. https://ecommerce-uat.qnb.com (test) — paths like /ipg/rest/v1/... are appended.
-    pub base_url: String,
-    pub user_id: String,
-    pub merchant_id: String,
-    /// API password ("Merchant API Details" in the QNB merchant console).
-    pub merchant_pwd: String,
-    /// API key ("Merchant API Details" in the QNB merchant console).
-    pub merchant_key: String,
 }
 
 #[derive(Clone, Debug)]
@@ -93,7 +82,10 @@ impl Config {
                     .map_err(|_| "BOOKEO_TIMEZONE must be an IANA timezone, e.g. Asia/Qatar")?,
                 webhook_url: webhook_url()?,
             },
-            qnb: qnb_config()?,
+            skipcash_base_url: env::var("SKIPCASH_BASE_URL")
+                .ok()
+                .map(|u| u.trim().trim_end_matches('/').to_string())
+                .filter(|u| !u.is_empty()),
             website_api_key: website_api_key()?,
             email: email_config()?,
         })
@@ -128,29 +120,6 @@ fn website_api_key() -> Result<Option<String>, String> {
         return Err("WEBSITE_API_KEY must be at least 32 characters".into());
     }
     Ok(Some(key))
-}
-
-/// All of the QNB variables, or none of them.
-fn qnb_config() -> Result<Option<QnbConfig>, String> {
-    let keys = [
-        "QNB_USER_ID",
-        "QNB_MERCHANT_ID",
-        "QNB_MERCHANT_PWD",
-        "QNB_MERCHANT_KEY",
-    ];
-    if keys.iter().all(|k| env::var(k).is_err()) {
-        return Ok(None);
-    }
-    Ok(Some(QnbConfig {
-        base_url: env::var("QNB_BASE_URL")
-            .unwrap_or_else(|_| "https://ecommerce-uat.qnb.com".into())
-            .trim_end_matches('/')
-            .to_string(),
-        user_id: required(keys[0])?,
-        merchant_id: required(keys[1])?,
-        merchant_pwd: required(keys[2])?,
-        merchant_key: required(keys[3])?,
-    }))
 }
 
 fn email_config() -> Result<Option<EmailConfig>, String> {

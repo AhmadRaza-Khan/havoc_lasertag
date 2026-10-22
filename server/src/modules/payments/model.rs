@@ -48,13 +48,16 @@ pub struct PayableBooking {
     pub payment_due_at: Option<DateTime<Utc>>,
 }
 
-/// One QNB payment link.
+/// One SkipCash payment (its payment page). `open` until it's paid or we stop using it.
 #[derive(Debug, Clone, FromRow)]
 pub struct Payment {
     pub id: Uuid,
     pub booking_id: Uuid,
     pub merchant_txn_id: String,
-    pub ipg_txn_id: Option<String>,
+    /// SkipCash's payment id.
+    pub provider_payment_id: Option<String>,
+    /// The card processor's reference for a paid payment (reconciliation).
+    pub visa_id: Option<String>,
     pub pay_url: Option<String>,
     pub amount: String,
     pub currency: String,

@@ -13,7 +13,7 @@ use tracing_subscriber::EnvFilter;
 
 use crate::{
     config::Config,
-    integrations::{bookeo::BookeoClient, email::Mailer, expo_push::ExpoPush, qnb::QnbClient},
+    integrations::{bookeo::BookeoClient, email::Mailer, expo_push::ExpoPush},
     state::AppState,
 };
 
@@ -35,12 +35,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState {
         db,
         bookeo: Arc::new(BookeoClient::new(&config.bookeo)?),
-        qnb: config
-            .qnb
-            .as_ref()
-            .map(QnbClient::new)
-            .transpose()?
-            .map(Arc::new),
+        skipcash_slot: Arc::new(Default::default()),
         mailer: Arc::new(Mailer::new(config.email.as_ref())?),
         push: Arc::new(ExpoPush::new(
             std::env::var("EXPO_PUSH_URL").ok(),
@@ -52,8 +47,10 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     };
     // Imports interrupted by a restart can't resume: mark them failed, drop their temp files.
     modules::stats::recover(&state).await?;
-    if state.qnb.is_none() {
-        tracing::warn!("QNB is not configured: online payment is off");
+    // SkipCash credentials are saved by admins in Settings.
+    modules::payments::load_skipcash(&state).await?;
+    if state.skipcash().is_none() {
+        tracing::warn!("SkipCash is not set up (admin panel → Settings): online payment is off");
     }
     if state.config.email.is_none() {
         tracing::warn!("SMTP2GO is not configured: emails are logged, not sent");

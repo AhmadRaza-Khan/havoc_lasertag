@@ -7,7 +7,7 @@ use super::{repository, service};
 use crate::state::AppState;
 
 const INTERVAL: Duration = Duration::from_secs(60);
-/// Per run, per task. QNB is asked about at most this many open links a minute.
+/// Per run, per task. SkipCash is asked about at most this many payments a minute.
 const BATCH: i64 = 50;
 
 pub async fn run(state: AppState) {
@@ -30,6 +30,18 @@ pub async fn run_once(state: &AppState) {
             }
         }
         Err(e) => tracing::error!("listing open payment links: {e}"),
+    }
+
+    // 1b. Payments we stopped using, which SkipCash keeps payable for up to an hour.
+    match repository::recently_closed(&state.db, BATCH).await {
+        Ok(links) => {
+            for p in links {
+                if let Err(e) = service::poll_closed(state, &p).await {
+                    tracing::warn!(payment_id = %p.id, "could not check closed payment: {e}");
+                }
+            }
+        }
+        Err(e) => tracing::error!("listing recently closed payments: {e}"),
     }
 
     // 2. Paid but not yet in Bookeo.
@@ -61,7 +73,7 @@ pub async fn run_once(state: &AppState) {
         Ok(links) => {
             for p in links {
                 if let Err(e) = service::close_for_canceled_booking(state, &p).await {
-                    tracing::warn!(payment_id = %p.id, "could not close pay link: {e}");
+                    tracing::warn!(payment_id = %p.id, "could not close payment: {e}");
                 }
             }
         }

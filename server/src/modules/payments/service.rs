@@ -11,7 +11,7 @@ use crate::{
     error::{AppError, AppResult},
     integrations::{
         bookeo::{Money, NewPayment},
-        qnb::{LinkStatus, PayLinkRequest, QnbClient, QnbError},
+        skipcash::{NewPayment as SkipCashPayment, PaymentState, SkipCashClient, WebhookPayload},
     },
     modules::{bookings, players::repository as players},
     state::AppState,
@@ -27,7 +27,7 @@ pub struct SettingsResponse {
     pub settings: PaymentSettings,
     /// Fixed time allowed to pay in `pay_now` mode.
     pub pay_now_minutes: i64,
-    /// False when the server has no QNB credentials: app bookings have nothing to pay.
+    /// False when the server has no SkipCash credentials: app bookings have nothing to pay.
     pub online_payment_enabled: bool,
 }
 
@@ -66,7 +66,7 @@ fn settings_response(state: &AppState, settings: PaymentSettings) -> SettingsRes
     SettingsResponse {
         settings,
         pay_now_minutes: PAY_NOW_MINUTES,
-        online_payment_enabled: state.qnb.is_some(),
+        online_payment_enabled: state.skipcash().is_some(),
     }
 }
 
@@ -77,7 +77,9 @@ fn settings_response(state: &AppState, settings: PaymentSettings) -> SettingsRes
 /// After a booking is made in the app: decides whether and by when it must be paid, and
 /// emails the player the deadline (with a pay link in `pay_later` mode).
 pub async fn on_booking_created(state: &AppState, booking_id: Uuid) -> AppResult<()> {
-    let Some(qnb) = &state.qnb else { return Ok(()) };
+    let Some(skipcash) = state.skipcash() else {
+        return Ok(());
+    };
     let Some(booking) = repository::booking(&state.db, booking_id, None).await? else {
         return Ok(());
     };
@@ -104,7 +106,7 @@ pub async fn on_booking_created(state: &AppState, booking_id: Uuid) -> AppResult
     // "Pay later": a link up front, so the email can carry it. "Pay now": the app opens the
     // payment page itself; the email just states the deadline.
     let link = match settings.mode {
-        PaymentMode::PayLater => new_link(state, qnb, &booking, false)
+        PaymentMode::PayLater => new_link(state, &skipcash, &booking)
             .await
             .inspect_err(|e| tracing::error!(%booking_id, "could not create pay link: {e}"))
             .ok()
@@ -133,7 +135,7 @@ pub struct PaymentView {
     pub currency: Option<String>,
     /// Unpaid bookings are canceled after this. Business timezone.
     pub due_at: Option<DateTime<FixedOffset>>,
-    /// QNB's payment page, to open in a WebView. Only while unpaid.
+    /// SkipCash's payment page, to open in a WebView. Only while unpaid.
     pub pay_url: Option<String>,
     /// Why the latest attempt failed (e.g. card declined), if it did.
     pub last_failure: Option<String>,
@@ -141,13 +143,8 @@ pub struct PaymentView {
 }
 
 /// Returns a payment page for the booking: the open one if it's still good, else a new one.
-pub async fn start(
-    state: &AppState,
-    booking_id: Uuid,
-    player_id: Uuid,
-    arabic: bool,
-) -> AppResult<PaymentView> {
-    let qnb = state.qnb.as_ref().ok_or_else(payment_off)?;
+pub async fn start(state: &AppState, booking_id: Uuid, player_id: Uuid) -> AppResult<PaymentView> {
+    let skipcash = state.skipcash().ok_or_else(payment_off)?;
     let mut lock = state.db.begin().await?;
     repository::lock_booking(&mut lock, booking_id).await?;
 
@@ -172,46 +169,47 @@ pub async fn start(
     let (amount, _) = payable_amount(&booking)
         .ok_or_else(|| AppError::Conflict("This booking has nothing to pay online".into()))?;
 
-    // Reuse the newest open link while it's unpaid and for the right amount; close the rest.
+    // Reuse the newest open payment while it's still payable and for the right amount; stop
+    // using the rest.
     let mut reusable = None;
     for p in repository::open_for_booking(&state.db, booking_id).await? {
         if reusable.is_none() && p.amount == amount && p.pay_url.is_some() {
-            match check(state, qnb, &p).await? {
-                LinkStatus::Accepted { .. } => {
+            match check(state, &skipcash, &p).await? {
+                PaymentState::Paid { .. } => {
                     return view(state, refreshed(state, booking_id).await?).await;
                 }
-                LinkStatus::Pending => {
+                PaymentState::Pending => {
                     reusable = Some(p);
                     continue;
                 }
-                // Asking again after a failed attempt: start over with a fresh link.
-                LinkStatus::Rejected(_) => {}
+                // Canceled (expired) or failed: `check` closed it; start over with a fresh page.
+                _ => continue,
             }
         }
-        if close_link(state, qnb, &p).await? {
+        if retire(state, &skipcash, &p).await? {
             return view(state, refreshed(state, booking_id).await?).await;
         }
     }
     if reusable.is_none() {
-        new_link(state, qnb, &booking, arabic).await?;
+        new_link(state, &skipcash, &booking).await?;
     }
 
     lock.commit().await?;
     view(state, refreshed(state, booking_id).await?).await
 }
 
-/// The booking's payment state, confirmed with QNB while unpaid. The app polls this while
-/// the payment page is open.
+/// The booking's payment state, confirmed with SkipCash while unpaid. The app polls this
+/// while the payment page is open.
 pub async fn status(state: &AppState, booking_id: Uuid, player_id: Uuid) -> AppResult<PaymentView> {
     let booking = find(state, booking_id, Some(player_id)).await?;
     if booking.payment_status == "unpaid"
-        && let Some(qnb) = &state.qnb
+        && let Some(skipcash) = state.skipcash()
         && let Some(p) = repository::open_for_booking(&state.db, booking_id)
             .await?
             .into_iter()
             .next()
     {
-        check(state, qnb, &p).await?;
+        check(state, &skipcash, &p).await?;
         return view(state, refreshed(state, booking_id).await?).await;
     }
     view(state, booking).await
@@ -255,27 +253,82 @@ async fn view(state: &AppState, booking: PayableBooking) -> AppResult<PaymentVie
 // Background work (see `worker`)
 // ---------------------------------------------------------------------------
 
-/// Asks QNB about an open link; settles it if paid.
+/// Asks SkipCash about an open payment; settles it if paid.
 pub async fn poll_link(state: &AppState, payment: &Payment) -> AppResult<()> {
-    if let Some(qnb) = &state.qnb {
-        check(state, qnb, payment).await?;
+    if let Some(skipcash) = state.skipcash() {
+        check(state, &skipcash, payment).await?;
     }
     Ok(())
 }
 
-/// Closes an open link whose booking was canceled. A last-second payment is still settled.
+/// Checks a payment we stopped using: SkipCash keeps its page payable for up to an hour, so a
+/// late payment is caught (and settled) here even if no webhook arrives.
+pub async fn poll_closed(state: &AppState, payment: &Payment) -> AppResult<()> {
+    let (Some(skipcash), Some(id)) = (state.skipcash(), &payment.provider_payment_id) else {
+        return Ok(());
+    };
+    if let PaymentState::Paid {
+        amount,
+        currency,
+        visa_id,
+    } = skipcash.payment(id).await?
+    {
+        settle(state, payment, &amount, &currency, visa_id.as_deref()).await?;
+    }
+    Ok(())
+}
+
+/// Stops using an open payment whose booking was canceled. A last-second payment is still
+/// settled (and flagged for a refund).
 pub async fn close_for_canceled_booking(state: &AppState, payment: &Payment) -> AppResult<()> {
-    let Some(qnb) = &state.qnb else { return Ok(()) };
+    let Some(skipcash) = state.skipcash() else {
+        return Ok(());
+    };
     let mut lock = state.db.begin().await?;
     repository::lock_booking(&mut lock, payment.booking_id).await?;
-    if close_link(state, qnb, payment).await? {
-        tracing::error!(
-            booking_id = %payment.booking_id,
-            ipg_txn_id = ?payment.ipg_txn_id,
-            "canceled booking was paid; refund it from the QNB merchant console"
-        );
-    }
+    retire(state, &skipcash, payment).await?;
     lock.commit().await?;
+    Ok(())
+}
+
+/// SkipCash's webhook (already verified): settles payments made with the app closed and
+/// records failed attempts for the app. Unknown payments are ignored.
+pub async fn on_webhook(state: &AppState, w: &WebhookPayload) -> AppResult<()> {
+    // A failed attempt is filed under a new SkipCash id with our transaction id (manual §4).
+    let payment = match repository::by_provider_id(&state.db, &w.payment_id).await? {
+        Some(p) => Some(p),
+        None => match w.transaction_id.as_deref().filter(|t| !t.is_empty()) {
+            Some(t) => repository::by_merchant_txn_id(&state.db, t).await?,
+            None => None,
+        },
+    };
+    let Some(p) = payment else {
+        tracing::info!(payment_id = %w.payment_id, "skipcash webhook for an unknown payment; ignored");
+        return Ok(());
+    };
+    let status: i64 = w
+        .status_id
+        .as_deref()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(-1);
+    let amount = w.amount.clone().unwrap_or_else(|| p.amount.clone());
+    match PaymentState::from_status(status, amount, p.currency.clone(), w.visa_id.clone()) {
+        PaymentState::Paid {
+            amount,
+            currency,
+            visa_id,
+        } => settle(state, &p, &amount, &currency, visa_id.as_deref()).await?,
+        PaymentState::Failed => repository::touch(&state.db, p.id, Some(FAILED_ATTEMPT)).await?,
+        PaymentState::Canceled
+            if p.provider_payment_id.as_deref() == Some(w.payment_id.as_str()) =>
+        {
+            repository::close(&state.db, p.id).await?
+        }
+        PaymentState::Refunded => {
+            tracing::warn!(booking_id = %p.booking_id, payment_id = %w.payment_id, "skipcash reports a refund")
+        }
+        _ => {}
+    }
     Ok(())
 }
 
@@ -322,14 +375,13 @@ pub enum Unpaid {
     LeftPaymentPage,
 }
 
-/// Closes the booking's payment links, then cancels it in Bookeo and emails the customer.
-/// If a link turns out to be paid, the booking is kept (and settled) instead.
-/// Call with the booking's lock held.
+/// Checks the booking's open payments one last time and stops using them, then cancels it in
+/// Bookeo and emails the customer. If a payment turns out to be paid, the booking is kept (and
+/// settled) instead. Call with the booking's lock held.
 async fn cancel_unpaid(state: &AppState, booking: &PayableBooking, why: Unpaid) -> AppResult<()> {
-    // Close the links first so nobody can pay for a booking that's about to be canceled.
-    if let Some(qnb) = &state.qnb {
+    if let Some(skipcash) = state.skipcash() {
         for p in repository::open_for_booking(&state.db, booking.id).await? {
-            if close_link(state, qnb, &p).await? {
+            if retire(state, &skipcash, &p).await? {
                 return Ok(());
             }
         }
@@ -350,8 +402,8 @@ pub async fn record_in_bookeo(state: &AppState, payment_id: Uuid) -> AppResult<(
         return Ok(());
     };
     let booking = find(state, p.booking_id, None).await?;
-    let ipg = p.ipg_txn_id.clone().unwrap_or_default();
-    let comment = format!("QNB transaction {ipg} ({})", p.merchant_txn_id);
+    let provider_id = p.provider_payment_id.clone().unwrap_or_default();
+    let comment = format!("SkipCash payment {provider_id} ({})", p.merchant_txn_id);
 
     // A previous try may have reached Bookeo without us saving the result.
     let existing = state
@@ -408,36 +460,49 @@ fn payment_off() -> AppError {
     AppError::Conflict("Online payment is not available".into())
 }
 
-/// Creates a QNB link for the booking's price.
+/// Shown in the app after a card attempt failed (SkipCash doesn't say why).
+const FAILED_ATTEMPT: &str = "The card payment didn't go through";
+
+/// Creates a SkipCash payment for the booking's price, in the player's name.
 async fn new_link(
     state: &AppState,
-    qnb: &QnbClient,
+    skipcash: &SkipCashClient,
     booking: &PayableBooking,
-    arabic: bool,
 ) -> AppResult<Payment> {
     let (amount, currency) = payable_amount(booking).ok_or_else(payment_off)?;
+    let player = players::find_by_id(&state.db, booking.player_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Player not found".into()))?;
+    // SkipCash requires an email (sign-up asks for one; accounts staff created may lack it).
+    if player.email.as_deref().is_none_or(|e| e.trim().is_empty()) {
+        return Err(AppError::Conflict(
+            "Online payment needs an email address on your account. Ask our staff to add one, or pay at the venue.".into(),
+        ));
+    }
     let row = repository::insert(&state.db, booking.id, &amount, &currency).await?;
-    let tz = state.config.bookeo.timezone;
-    let due_date = booking
-        .payment_due_at
-        .unwrap_or(booking.start_time)
-        .with_timezone(&tz)
-        .date_naive();
 
-    let link = qnb
-        .create_pay_link(&PayLinkRequest {
-            merchant_txn_id: &row.merchant_txn_id,
+    // SkipCash wants a first and a last name.
+    let mut names = player.full_name.split_whitespace();
+    let first = names.next().unwrap_or(&player.playername).to_string();
+    let rest = names.collect::<Vec<_>>().join(" ");
+    let last = if rest.is_empty() { first.clone() } else { rest };
+    let reference = format!("Booking {}", booking.bookeo_booking_number);
+
+    let created = skipcash
+        .create_payment(&SkipCashPayment {
             amount: &amount,
-            currency: &currency,
-            reference: &format!("Booking {}", booking.bookeo_booking_number),
-            due_date,
-            arabic,
+            first_name: &first,
+            last_name: &last,
+            phone: player.phone.as_deref(),
+            email: player.email.as_deref(),
+            transaction_id: &row.merchant_txn_id,
+            custom1: Some(&reference),
         })
         .await;
-    match link {
-        Ok(link) => {
-            tracing::info!(booking_id = %booking.id, ipg_txn_id = %link.ipg_txn_id, "pay link created");
-            Ok(repository::set_link(&state.db, row.id, &link.ipg_txn_id, &link.url).await?)
+    match created {
+        Ok(c) => {
+            tracing::info!(booking_id = %booking.id, skipcash_id = %c.id, "skipcash payment created");
+            Ok(repository::set_link(&state.db, row.id, &c.id, &c.pay_url).await?)
         }
         Err(e) => {
             repository::close(&state.db, row.id).await?;
@@ -446,62 +511,80 @@ async fn new_link(
     }
 }
 
-/// Asks QNB about a link and acts on the answer.
-async fn check(state: &AppState, qnb: &QnbClient, p: &Payment) -> AppResult<LinkStatus> {
-    let Some(ipg) = &p.ipg_txn_id else {
-        return Ok(LinkStatus::Pending);
+/// Asks SkipCash about a payment and acts on the answer: settles it if paid, stops using it if
+/// SkipCash canceled it (unfinished for an hour) or it failed.
+async fn check(
+    state: &AppState,
+    skipcash: &SkipCashClient,
+    p: &Payment,
+) -> AppResult<PaymentState> {
+    let Some(id) = &p.provider_payment_id else {
+        return Ok(PaymentState::Pending);
     };
-    let status = qnb.link_status(ipg).await?;
-    match &status {
-        LinkStatus::Accepted { amount, currency } => settle(state, p, amount, currency).await?,
-        LinkStatus::Rejected(reason) => repository::touch(&state.db, p.id, Some(reason)).await?,
-        LinkStatus::Pending => repository::touch(&state.db, p.id, None).await?,
+    let st = skipcash.payment(id).await?;
+    match &st {
+        PaymentState::Paid {
+            amount,
+            currency,
+            visa_id,
+        } => settle(state, p, amount, currency, visa_id.as_deref()).await?,
+        PaymentState::Pending => repository::touch(&state.db, p.id, None).await?,
+        PaymentState::Failed => {
+            repository::touch(&state.db, p.id, Some(FAILED_ATTEMPT)).await?;
+            repository::close(&state.db, p.id).await?;
+        }
+        PaymentState::Canceled | PaymentState::Refunded => {
+            repository::touch(&state.db, p.id, None).await?;
+            repository::close(&state.db, p.id).await?;
+        }
     }
-    Ok(status)
+    Ok(st)
 }
 
-/// Disables a link at QNB, then checks it one last time. Returns `true` if it turned out paid
-/// (and was settled); otherwise it's closed. Errors if QNB can't be reached, so the link is
-/// never treated as closed while it might still be payable.
-async fn close_link(state: &AppState, qnb: &QnbClient, p: &Payment) -> AppResult<bool> {
-    let Some(ipg) = &p.ipg_txn_id else {
-        repository::close(&state.db, p.id).await?;
-        return Ok(false);
-    };
-    match qnb.cancel_pay_link(ipg).await {
-        Ok(()) => {}
-        // e.g. already paid or expired; the inquiry below tells which.
-        Err(QnbError::Rejected(e)) => {
-            tracing::info!(ipg_txn_id = %ipg, "qnb refused to cancel link: {e}")
-        }
-        Err(e) => return Err(e.into()),
-    }
-    if let LinkStatus::Accepted { amount, currency } = qnb.link_status(ipg).await? {
-        settle(state, p, &amount, &currency).await?;
+/// Stops using a payment: checks it one last time, then closes it. Returns `true` if it turned
+/// out paid (and was settled). SkipCash can't disable a payment page, and cancels unfinished
+/// ones within an hour; a payment that still arrives (worker or webhook) is settled and logged
+/// for a refund if its booking was canceled. Errors if SkipCash can't be reached, so a booking
+/// is never canceled while its payment might already be done.
+async fn retire(state: &AppState, skipcash: &SkipCashClient, p: &Payment) -> AppResult<bool> {
+    if let Some(id) = &p.provider_payment_id
+        && let PaymentState::Paid {
+            amount,
+            currency,
+            visa_id,
+        } = skipcash.payment(id).await?
+    {
+        settle(state, p, &amount, &currency, visa_id.as_deref()).await?;
         return Ok(true);
     }
     repository::close(&state.db, p.id).await?;
     Ok(false)
 }
 
-/// QNB accepted the payment: mark it paid (once), record it in Bookeo, email a receipt.
-async fn settle(state: &AppState, p: &Payment, amount: &str, currency: &str) -> AppResult<()> {
+/// SkipCash took the payment: mark it paid (once), record it in Bookeo, email a receipt.
+async fn settle(
+    state: &AppState,
+    p: &Payment,
+    amount: &str,
+    currency: &str,
+    visa_id: Option<&str>,
+) -> AppResult<()> {
     if normalize_amount(amount).as_deref() != Some(p.amount.as_str()) || currency != p.currency {
         tracing::warn!(
             payment_id = %p.id,
             expected = %format!("{} {}", p.amount, p.currency),
             charged = %format!("{amount} {currency}"),
-            "qnb charged a different amount"
+            "skipcash charged a different amount"
         );
     }
-    let newly_paid = match repository::mark_paid(&state.db, p).await {
+    let newly_paid = match repository::mark_paid(&state.db, p, visa_id).await {
         Ok(changed) => changed,
         Err(sqlx::Error::Database(e)) if e.is_unique_violation() => {
-            // Another link of this booking was paid first.
+            // Another payment of this booking was paid first.
             tracing::error!(
                 booking_id = %p.booking_id,
-                ipg_txn_id = ?p.ipg_txn_id,
-                "booking paid twice; refund this transaction from the QNB merchant console"
+                skipcash_id = ?p.provider_payment_id,
+                "booking paid twice; refund this payment from the SkipCash merchant portal"
             );
             repository::touch(&state.db, p.id, Some("Paid twice: refund needed")).await?;
             repository::close(&state.db, p.id).await?;
@@ -513,10 +596,14 @@ async fn settle(state: &AppState, p: &Payment, amount: &str, currency: &str) -> 
         return Ok(());
     }
     let booking_id = p.booking_id;
-    tracing::info!(%booking_id, ipg_txn_id = ?p.ipg_txn_id, "booking paid");
+    tracing::info!(%booking_id, skipcash_id = ?p.provider_payment_id, "booking paid");
     let booking = find(state, booking_id, None).await?;
     if booking.status == "canceled" {
-        tracing::error!(%booking_id, "payment received for a canceled booking; refund needed");
+        tracing::error!(
+            %booking_id,
+            skipcash_id = ?p.provider_payment_id,
+            "payment received for a canceled booking; refund it from the SkipCash merchant portal"
+        );
     }
     after_payment(state, &booking, p).await;
     Ok(())

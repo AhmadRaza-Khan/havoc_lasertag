@@ -105,6 +105,15 @@ pub async fn delete(db: &PgPool, id: Uuid) -> sqlx::Result<bool> {
     Ok(result.rows_affected() > 0)
 }
 
+/// A player's password hash (to confirm account deletion). Never the Havoc Admin account.
+pub async fn password_hash(db: &PgPool, id: Uuid) -> sqlx::Result<Option<String>> {
+    sqlx::query_scalar("SELECT password_hash FROM players WHERE id = $1 AND id <> $2")
+        .bind(id)
+        .bind(super::HAVOC_ADMIN_ID)
+        .fetch_optional(db)
+        .await
+}
+
 /// Id and password hash for login. Playername must already be normalized.
 pub async fn find_credentials(
     db: &PgPool,

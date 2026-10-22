@@ -48,7 +48,7 @@ state.rs         AppState shared by handlers
 shared/          cross-module helpers: validation, password hashing, JWT, pagination
 integrations/
   bookeo/        typed Bookeo API client (products cache, slots, customers, bookings, payments)
-  qnb/           QNB payment gateway client (Pay by Link, transaction inquiry, link cancel)
+  skipcash/      SkipCash card payments client (create/read payments, request and webhook signatures)
   (modules/webhooks/  Bookeo's signed calls: bookings canceled in Bookeo)
   email.rs       SMTP2GO mailer
 modules/
@@ -151,6 +151,10 @@ player bookings notify staff. Customers get Bookeo's emails when they have an em
 | GET | `/api/stats/imports` | admin | last 10 uploads |
 | GET | `/api/settings/payments` | admin | `{mode: pay_now\|pay_later, pay_later_minutes, pay_now_minutes, online_payment_enabled}` |
 | PUT | `/api/settings/payments` | admin | `{mode, pay_later_minutes}` (15 min – 30 days) |
+| GET | `/api/settings/skipcash` | admin | `{configured, environment, client_id, key_id, key_secret_set, webhook_key_set, updated_at}` (secrets are never returned) |
+| PUT | `/api/settings/skipcash` | admin | `{environment: sandbox\|production, client_id, key_id, key_secret, webhook_key}`; empty secrets keep the saved ones. Takes effect immediately |
+| DELETE | `/api/settings/skipcash` | admin | Removes the credentials: online payment off |
+| POST | `/api/settings/skipcash/test` | admin | Same body as PUT, not saved. Creates a 1.00 QAR test payment (checks key ID + secret) and reads it back (checks client ID) → `{ok, checks: [{name, ok, message}]}` |
 | GET | `/api/stats/leaderboard` | admin | general report: every player's all-time totals, ranked by points |
 | GET | `/api/stats/players/{id}` | admin | one player's all-time totals (the admin panel's player stats page) |
 | GET | `/api/stats/players/{id}/games?page=&per_page=` | admin | that player's game records, newest first, with everything from the reports |
@@ -171,6 +175,8 @@ player bookings notify staff. Customers get Bookeo's emails when they have an em
 | POST | `/api/player/auth/signup` | `{full_name, playername, email, phone, password}` (email and phone required) → `{token, player}` (201), signed in. 409 if the playername is taken; at most 5 sign-ups per network per 15 min (429). Admins can still create players in the panel |
 | GET | `/api/player/auth/playername-available?playername=` | `{playername, available, reason}` — for the sign-up form (format rules + taken) |
 | GET | `/api/player/auth/me` | current player |
+| DELETE | `/api/player/auth/me` | `{password}` → 204: deletes the signed-in player's account (store requirement): account, bookings in the app, chats, picture, push tokens; game stats stay, unlinked. Wrong password → 403 (not 401, so the app stays signed in); throttled like login |
+| POST | `/api/player/auth/delete-account` | `{playername, password}` → 204: the same, for the public deletion page (no app needed) |
 | PUT | `/api/player/me/avatar` | profile picture: multipart field `file`, JPEG/PNG/WebP (checked by content), max 900 KB (the app sends a ~1024 px JPEG) → updated player |
 | DELETE | `/api/player/me/avatar` | remove the picture → updated player |
 | GET | `/api/avatars/{player_id}?v=…` | the picture (no token; cached for a year — the `v` changes with each upload). Players, chat players and leaderboard entries carry it as `avatar_url` (a path: prefix the API origin) |
@@ -179,8 +185,8 @@ player bookings notify staff. Customers get Bookeo's emails when they have an em
 | POST | `/api/player/bookings` | `{product_id, event_id, num_people, other_player_ids?, options?: [{id, value}]}` → booking (201). Add-on values: the choice value's `id`, a number, `"true"`/`"false"`, or text; staff-only add-ons are refused. Bookings return `options: [{id, name, value}]` (choice: the value's name). Bookeo rejections (slot full, …) → 422 |
 | GET | `/api/player/bookings?when=upcoming\|past&page=&per_page=` | the player's own bookings |
 | GET | `/api/player/bookings/{id}` | one booking, status refreshed from Bookeo |
-| POST | `/api/player/bookings/{id}/payment?lang=ar` | QNB payment page for the booking → `{status, pay_url, amount, currency, due_at, last_failure, …}`. Reuses the open link; a new one after a failed attempt. 409 if nothing to pay / canceled / time to pay passed |
-| GET | `/api/player/bookings/{id}/payment` | payment state, confirmed with QNB — poll while the payment page is open |
+| POST | `/api/player/bookings/{id}/payment` | SkipCash payment page for the booking → `{status, pay_url, amount, currency, due_at, last_failure, …}`. Reuses the open payment while it's payable; a new one after it expired or failed. 409 if nothing to pay / canceled / time to pay passed |
+| GET | `/api/player/bookings/{id}/payment` | payment state, confirmed with SkipCash — poll while the payment page is open |
 | DELETE | `/api/player/bookings/{id}/payment` | the customer closed the payment page unpaid: cancels a *pay now* booking at once (a last-second payment still counts); *pay later* bookings are unaffected |
 
 | GET | `/api/player/stats` | my all-time totals and leaderboard `position` (`null` until I've played), plus `details` (below) |
@@ -202,36 +208,47 @@ Display names: the admin panel and the app show `points` as **Score**, `frags` a
 
 | GET | `/api/player/offers` | promotions live today: active and within their dates (business timezone), newest first. Plain array of `{id, title, description, image_url, starts_on, ends_on, …}` (title/description may be empty; offers with neither text nor image are left out). The app shows them in the top bar and on the Offers tab |
 
-### Payments (QNB, mobile app)
+### Payments (SkipCash, mobile app)
 
-Bookings made in the app are paid by card on QNB's hosted payment page (spec 5.23 "Pay by Link"),
-opened in a WebView. Card details never reach the app or this server. Booking responses carry
-`payment_status` (`not_required` | `unpaid` | `paid`) and `payment_due_at`.
+Bookings made in the app are paid by card on SkipCash's hosted payment page (SkipCash Integration
+Manual v1.4, "Card Checkout API"), opened in a WebView. Card details never reach the app or this
+server. Booking responses carry `payment_status` (`not_required` | `unpaid` | `paid`) and
+`payment_due_at`.
 
 1. Create the booking (`POST /api/player/bookings`). If `payment_status` is `unpaid`:
 2. `POST /api/player/bookings/{id}/payment` → open `pay_url` in a WebView.
 3. While it's open, poll `GET …/payment` every 3–5 s. Close the WebView when `status` is `paid`
    (show success). If `last_failure` is set, show it and offer "Try again" (repeat step 2).
-   Don't read the WebView's URL or page to decide the outcome — QNB has no return URL for
-   pay links, and only the server's answer counts.
+   Don't read the WebView's URL or page to decide the outcome: only the server's answer counts.
 4. If the customer closes the payment page without paying, call `DELETE …/payment`. In *pay
    now* mode that cancels the booking right away; in *pay later* mode it stays `unpaid` until
    `payment_due_at` and "Pay" on the booking repeats step 2.
 
-When QNB accepts a payment the server marks the booking `paid`, records the payment in Bookeo
-(`creditCard`, comment `QNB transaction <ipgTxnId>`) and emails a receipt. A background job
-(every minute) catches payments finished with the app closed, retries Bookeo if it was down, and
-cancels bookings not paid by `payment_due_at` (links closed first; a last-second payment wins).
+The server creates each payment with `POST /api/v1/payments` (signed: HMAC-SHA256 of the fields
+with the key secret) with the player's name, email and phone, our reference as `transactionId`
+and the booking number as `custom1`, and confirms it with `GET /api/v1/payments/{id}` (client
+ID). When it's paid, the booking is marked `paid`, the payment is recorded in Bookeo
+(`creditCard`, comment `SkipCash payment <id>`) and a receipt is emailed.
 
-The seat is always booked before payment, so a payment can never arrive for seats that are gone
-(no refunds): before an unpaid booking is canceled, its QNB link is closed and checked one last
-time.
+**Webhook**: set `https://<api domain>/api/webhooks/skipcash` as the webhook URL in the SkipCash
+portal (Sandbox and Production → Credentials). Calls are verified with the saved webhook key
+(bad signature → 401) and answered 200 otherwise; they settle payments finished with the app
+closed and record failed attempts for the app. Leave the portal's *return URL* empty: the app
+watches the payment from the server, not the page.
+
+A background job (every minute) asks SkipCash about open payments, retries Bookeo if it was
+down, and cancels bookings not paid by `payment_due_at` (a last-second payment wins). SkipCash
+can't disable a payment page — it cancels unfinished ones after an hour — so before an unpaid
+booking is canceled its payment is checked one last time, and payments we stopped using are
+re-checked for 75 minutes: a late payment is still recorded, and if its booking was canceled
+the server logs that it needs a refund from the SkipCash merchant portal. The seat is always
+booked before payment, so a payment never arrives for seats that are gone.
 
 Admins choose in **Settings**: *Pay now* (default; canceled as soon as the customer leaves the
 payment page unpaid, or after 10 min if the app never reports back) or *Pay later*
 (a set time, 15 min – 30 days; the customer is emailed a pay link). The deadline is never later
 than the game's start. Staff-made bookings have nothing to pay online. Pending-approval bookings
-are paid right away; if staff deny one, refund it from the QNB merchant console.
+are paid right away; if staff deny one, refund it from the SkipCash merchant portal.
 
 Emails (SMTP2GO): payment due (pay later, with link), payment received, canceled for non-payment.
 Customers without an email address get none.
@@ -245,7 +262,7 @@ Customers without an email address get none.
 Bookeo signs each call: `X-Bookeo-Signature` = hex HMAC-SHA256, keyed with the Bookeo
 **secret key** (`BOOKEO_SECRET_KEY`), of `X-Bookeo-Timestamp` + `X-Bookeo-MessageId` + the
 webhook URL exactly as registered + the raw body. Nothing is sent back to Bookeo (the seats are
-already free there); if the booking had an open QNB payment link, the payments worker closes
+already free there); if the booking had an open SkipCash payment, the payments worker stops using
 it within a minute. Repeat deliveries are harmless.
 
 Set `BOOKEO_WEBHOOK_URL` to the public URL of the endpoint (production only). At startup the
@@ -278,6 +295,22 @@ Efficiency KDR, victims and insulters).
 
 Regression test on a real report (not in CI, needs the file):
 `STATS_PDF=/path/Total_statistic_17:43.pdf cargo test --release real_report -- --ignored`
+
+### Chat safety (store requirements)
+
+Players can block and report (App Store guideline 1.2, Google Play UGC policy); offensive words
+in messages are masked automatically (`shared/profanity.rs`).
+
+| Method | Path | Notes |
+|---|---|---|
+| POST / DELETE | `/api/player/chats/players/{id}/block` | block / unblock. Blocked either way → sending is refused (403) and the blocked player disappears from the blocker's chat list and directory. Havoc Admin can't be blocked |
+| GET | `/api/player/chats/blocks` | players I blocked |
+| POST | `/api/player/chats/reports` | `{player_id, message_id?, reason: spam\|harassment\|inappropriate\|other, details?}` → 201; keeps a copy of the reported message |
+| GET | `/api/chats/reports?status=open\|resolved` | admin: reports, newest first |
+| POST | `/api/chats/reports/{id}/resolve` | admin: mark handled |
+
+Public pages (admin web app, no login): `/privacy`, `/terms`, `/delete-account`. Store listing
+answers: `STORE_SUBMISSION.md`.
 
 ### Chats as Havoc Admin (admin panel)
 
@@ -341,11 +374,11 @@ Booking `status` is `pending` (awaiting staff approval — all current games hav
 - `BOOKEO_WEBHOOK_URL=https://<api domain>/api/webhooks/bookeo/bookings-deleted` syncs bookings
   canceled in Bookeo (see "Bookeo webhook"). Production only: never set it on a dev server that
   uses the production Bookeo keys.
-- Payments: `QNB_BASE_URL` (production URL from QNB), `QNB_USER_ID`, `QNB_MERCHANT_ID`,
-  `QNB_MERCHANT_PWD`, `QNB_MERCHANT_KEY` (API password/key: "Merchant API Details" in the QNB
-  merchant console). Without them online payment is off. Emails: `SMTP2GO_API_KEY` and
-  `MAIL_FROM` (a sender on a domain verified in SMTP2GO); without them emails are only logged.
-  The Bookeo API key needs permission to read and write payments.
+- Payments: enter the SkipCash credentials in the admin panel (Settings → SkipCash: merchant
+  portal → Production → Credentials), press **Test connection**, then **Save**; without them
+  online payment is off. Set the webhook URL shown there in the portal (see Payments). Emails:
+  `SMTP2GO_API_KEY` and `MAIL_FROM` (a sender on a domain verified in SMTP2GO); without them
+  emails are only logged. The Bookeo API key needs permission to read and write payments.
 - Push notifications work without configuration. If "enhanced push security" is enabled in the
   Expo project, set `EXPO_ACCESS_TOKEN`. (`EXPO_PUSH_URL` overrides the endpoint, for tests.)
 - `client/.env.production`: `VITE_API_URL=https://api.<domain>`.

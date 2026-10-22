@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { CircleCheck, TriangleAlert } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { SkipCashSettings } from '../components/SkipCashSettings'
 import { usePaymentSettings, useSavePaymentSettings } from '../hooks'
 import type { PaymentMode, PaymentSettings } from '../types'
 import '../settings.css'
@@ -38,6 +39,9 @@ export default function SettingsPage() {
           <PaymentSettingsForm settings={data} />
         )}
       </div>
+      <div className="panel panel-padded settings-panel">
+        <SkipCashSettings />
+      </div>
     </>
   )
 }
@@ -66,13 +70,13 @@ function PaymentSettingsForm({ settings }: { settings: PaymentSettings }) {
   return (
     <form className="settings-section" onSubmit={handleSubmit}>
       <h2>Payments</h2>
-      <p className="muted">Customers pay by card on QNB's secure payment page inside the app.</p>
+      <p className="muted">Customers pay by card on SkipCash's secure payment page inside the app.</p>
 
       {!settings.online_payment_enabled && (
         <p className="notice notice-warning" role="status">
           <TriangleAlert size={16} aria-hidden="true" />
-          Online payment is off: the server has no QNB credentials yet. App bookings have nothing
-          to pay until they're added.
+          Online payment is off: SkipCash isn't set up yet. App bookings have nothing to pay until
+          its credentials are saved below.
         </p>
       )}
 

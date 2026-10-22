@@ -1,12 +1,14 @@
-//! Online payment of app bookings through QNB's hosted payment page.
+//! Online payment of app bookings through SkipCash's hosted payment page.
 //!
-//! Flow: the app books → `POST /player/bookings/{id}/payment` returns QNB's page → the app
-//! opens it in a WebView and polls `GET .../payment` → when QNB reports the transaction
-//! accepted, the booking is marked paid and the payment is recorded in Bookeo. Leaving the
-//! page unpaid (`DELETE .../payment`) cancels a "pay now" booking at once. The `worker`
-//! does the same for payments finished with the app closed, and cancels bookings not paid in
-//! time (admins choose "pay now" or "pay later" in Settings).
+//! Flow: the app books → `POST /player/bookings/{id}/payment` returns SkipCash's page → the
+//! app opens it in a WebView and polls `GET .../payment` → when SkipCash reports the payment
+//! paid, the booking is marked paid and the payment is recorded in Bookeo. Leaving the page
+//! unpaid (`DELETE .../payment`) cancels a "pay now" booking at once. SkipCash's signed webhook
+//! (`POST /api/webhooks/skipcash`) and the `worker` catch payments finished with the app
+//! closed; the worker also cancels bookings not paid in time (admins choose "pay now" or
+//! "pay later" in Settings).
 
+mod credentials;
 mod emails;
 mod handlers;
 mod model;
@@ -14,10 +16,15 @@ mod repository;
 mod service;
 pub mod worker;
 
+pub use credentials::load as load_skipcash;
+pub use handlers::skipcash_webhook;
 pub use model::PaymentMode;
 pub use service::on_booking_created;
 
-use axum::{Router, routing::get};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 
 use crate::state::AppState;
 
@@ -28,10 +35,18 @@ pub const PAY_NOW_MINUTES: i64 = 10;
 
 /// Admin-only routes; mounted at `/settings` behind `auth::require_auth`.
 pub fn admin_routes() -> Router<AppState> {
-    Router::new().route(
-        "/payments",
-        get(handlers::get_settings).put(handlers::put_settings),
-    )
+    Router::new()
+        .route(
+            "/payments",
+            get(handlers::get_settings).put(handlers::put_settings),
+        )
+        .route(
+            "/skipcash",
+            get(handlers::get_skipcash)
+                .put(handlers::put_skipcash)
+                .delete(handlers::delete_skipcash),
+        )
+        .route("/skipcash/test", post(handlers::test_skipcash))
 }
 
 /// Mobile app routes, merged into `/player/bookings`.

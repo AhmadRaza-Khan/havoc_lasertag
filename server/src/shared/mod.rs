@@ -7,4 +7,5 @@ pub mod login_throttle;
 pub mod ocr;
 pub mod pagination;
 pub mod password;
+pub mod profanity;
 pub mod validation;

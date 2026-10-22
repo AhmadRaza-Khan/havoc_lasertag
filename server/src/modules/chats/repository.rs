@@ -22,8 +22,8 @@ pub async fn list_players(
     limit: i64,
     offset: i64,
 ) -> sqlx::Result<(Vec<ChatPlayer>, i64)> {
-    const FILTER: &str =
-        "id <> $1 AND ($2::text IS NULL OR playername ILIKE $2 OR full_name ILIKE $2)";
+    const FILTER: &str = "id <> $1 AND ($2::text IS NULL OR playername ILIKE $2 OR full_name ILIKE $2)
+        AND NOT EXISTS (SELECT 1 FROM player_blocks b WHERE b.blocker_id = $1 AND b.blocked_id = players.id)";
 
     let items = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT id, full_name, playername, last_seen_at,
@@ -76,7 +76,8 @@ pub async fn list_conversations(db: &PgPool, me: Uuid) -> sqlx::Result<Vec<Conve
              WHERE conversation_id = c.id
              ORDER BY created_at DESC, id DESC LIMIT 1
          ) lm ON true
-         WHERE c.player_a = $1 OR c.player_b = $1
+         WHERE (c.player_a = $1 OR c.player_b = $1)
+           AND NOT EXISTS (SELECT 1 FROM player_blocks b WHERE b.blocker_id = $1 AND b.blocked_id = o.id)
          ORDER BY c.last_message_at DESC",
     )
     .bind(me)

@@ -1,0 +1,158 @@
+/* Public legal pages: readable document layout on the dark Havoc look. */
+
+.legal {
+  min-height: 100vh;
+  background: #0b0a0f;
+  color: #e9e7ee;
+  display: flex;
+  flex-direction: column;
+}
+
+.legal-header {
+  padding: 24px 16px;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 42, 61, 0.35);
+  background: radial-gradient(60% 120% at 50% 0%, rgba(255, 42, 61, 0.25), transparent 70%);
+}
+
+.legal-logo {
+  height: 56px;
+  width: auto;
+}
+
+.legal-main {
+  flex: 1;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 20px 48px;
+  line-height: 1.7;
+}
+
+.legal-main h1 {
+  margin: 0 0 4px;
+  font-size: 2rem;
+  color: #fff;
+}
+
+.legal-main h2 {
+  margin: 32px 0 8px;
+  font-size: 1.15rem;
+  color: #ff5a68;
+}
+
+.legal-main p,
+.legal-main li {
+  color: #cfccd8;
+}
+
+.legal-main ul {
+  padding-left: 22px;
+}
+
+.legal-main a {
+  color: #ff5a68;
+}
+
+.legal-updated {
+  margin: 0 0 24px;
+  color: #8d8a99;
+  font-size: 0.9rem;
+}
+
+.legal-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 20px 16px 28px;
+  text-align: center;
+  color: #8d8a99;
+  font-size: 0.85rem;
+}
+
+.legal-footer nav {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-bottom: 8px;
+}
+
+.legal-footer a {
+  color: #cfccd8;
+}
+
+/* Account deletion form */
+
+.legal-card {
+  margin-top: 24px;
+  padding: 24px;
+  border-radius: 16px;
+  background: #14131a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.legal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.legal-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 600;
+  color: #e9e7ee;
+}
+
+.legal-form input[type='text'],
+.legal-form input[type='password'] {
+  font: inherit;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #0b0a0f;
+  color: #fff;
+}
+
+.legal-form .legal-check {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  font-weight: 400;
+  color: #cfccd8;
+}
+
+.legal-check input {
+  margin-top: 5px;
+  accent-color: #ff2a3d;
+}
+
+.legal-danger {
+  font: inherit;
+  font-weight: 700;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: #d6232f;
+  color: #fff;
+  cursor: pointer;
+}
+
+.legal-danger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.legal-error {
+  margin: 0;
+  color: #ff8a93;
+}
+
+.legal-done {
+  margin-top: 24px;
+  padding: 20px;
+  border-radius: 14px;
+  background: rgba(43, 212, 107, 0.1);
+  border: 1px solid rgba(43, 212, 107, 0.4);
+  color: #7ee2a8;
+}

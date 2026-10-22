@@ -10,6 +10,20 @@ export const chatKeys = {
   conversations: () => [...chatKeys.all, 'conversations'] as const,
   players: (search: string, page: number) => [...chatKeys.all, 'players', search, page] as const,
   messages: (playerId: string) => [...chatKeys.all, 'messages', playerId] as const,
+  reports: () => [...chatKeys.all, 'reports'] as const,
+}
+
+/** Open reports from players (blocking/reporting in the app), newest first. */
+export function useReports() {
+  return useQuery({ queryKey: chatKeys.reports(), queryFn: chatsApi.reports, refetchInterval: 30000 })
+}
+
+export function useResolveReport() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => chatsApi.resolveReport(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: chatKeys.reports() }),
+  })
 }
 
 export function useConversations() {

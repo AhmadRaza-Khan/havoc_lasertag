@@ -20,7 +20,7 @@ pub fn validate_body(body: &str) -> AppResult<String> {
             "Message can be at most {MAX_BODY_CHARS} characters"
         )));
     }
-    Ok(body.to_string())
+    Ok(crate::shared::profanity::clean(body))
 }
 
 #[derive(Debug, Deserialize)]

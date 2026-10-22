@@ -35,3 +35,19 @@ export type MessagesPage = {
   items: ChatMessage[]
   has_more: boolean
 }
+
+/** A player's report about another player or one of their messages. */
+export type ChatReport = {
+  id: string
+  reporter_id: string | null
+  reported_id: string | null
+  reporter_playername: string
+  reported_playername: string
+  message_id: string | null
+  /** A copy of the reported message, if a message was reported. */
+  message_body: string | null
+  reason: 'spam' | 'harassment' | 'inappropriate' | 'other'
+  details: string | null
+  created_at: string
+  resolved_at: string | null
+}

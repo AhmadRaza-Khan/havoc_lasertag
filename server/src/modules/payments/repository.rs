@@ -96,10 +96,10 @@ pub async fn overdue_bookings(db: &PgPool, limit: i64) -> sqlx::Result<Vec<Uuid>
 // Payments
 // ---------------------------------------------------------------------------
 
-const COLUMNS: &str = "id, booking_id, merchant_txn_id, ipg_txn_id, pay_url, amount, currency, \
-    status, last_failure, paid_at, bookeo_payment_id, created_at";
+const COLUMNS: &str = "id, booking_id, merchant_txn_id, provider_payment_id, visa_id, pay_url, amount, \
+    currency, status, last_failure, paid_at, bookeo_payment_id, created_at";
 
-/// Reserves a payment row (and its merchant transaction id) before calling QNB.
+/// Reserves a payment row (and our transaction id) before calling SkipCash.
 pub async fn insert(
     db: &PgPool,
     booking_id: Uuid,
@@ -117,13 +117,18 @@ pub async fn insert(
     .await
 }
 
-pub async fn set_link(db: &PgPool, id: Uuid, ipg_txn_id: &str, url: &str) -> sqlx::Result<Payment> {
+pub async fn set_link(
+    db: &PgPool,
+    id: Uuid,
+    provider_payment_id: &str,
+    url: &str,
+) -> sqlx::Result<Payment> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "UPDATE payments SET ipg_txn_id = $2, pay_url = $3, updated_at = now()
+        "UPDATE payments SET provider_payment_id = $2, pay_url = $3, updated_at = now()
          WHERE id = $1 RETURNING {COLUMNS}"
     )))
     .bind(id)
-    .bind(ipg_txn_id)
+    .bind(provider_payment_id)
     .bind(url)
     .fetch_one(db)
     .await
@@ -150,15 +155,55 @@ pub async fn paid_for_booking(db: &PgPool, booking_id: Uuid) -> sqlx::Result<Opt
     .await
 }
 
-/// Open links QNB should be asked about: unpaid bookings first checked longest ago.
+/// Open payments SkipCash should be asked about, checked longest ago first.
 pub async fn open_links(db: &PgPool, limit: i64) -> sqlx::Result<Vec<Payment>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {COLUMNS} FROM payments
-         WHERE status = 'open' AND ipg_txn_id IS NOT NULL
+         WHERE status = 'open' AND provider_payment_id IS NOT NULL
          ORDER BY updated_at LIMIT $1"
     )))
     .bind(limit)
     .fetch_all(db)
+    .await
+}
+
+/// Payments we stopped using in the last 75 minutes. SkipCash can't disable a payment page;
+/// it cancels unfinished ones after an hour, so until then a late payment is still possible.
+pub async fn recently_closed(db: &PgPool, limit: i64) -> sqlx::Result<Vec<Payment>> {
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT {COLUMNS} FROM payments
+         WHERE status = 'closed' AND provider_payment_id IS NOT NULL
+           AND created_at > now() - interval '75 minutes'
+         ORDER BY updated_at LIMIT $1"
+    )))
+    .bind(limit)
+    .fetch_all(db)
+    .await
+}
+
+/// A payment by SkipCash's id (webhooks).
+pub async fn by_provider_id(
+    db: &PgPool,
+    provider_payment_id: &str,
+) -> sqlx::Result<Option<Payment>> {
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT {COLUMNS} FROM payments WHERE provider_payment_id = $1"
+    )))
+    .bind(provider_payment_id)
+    .fetch_optional(db)
+    .await
+}
+
+/// A payment by our transaction id (webhooks for retries SkipCash files under a new id).
+pub async fn by_merchant_txn_id(
+    db: &PgPool,
+    merchant_txn_id: &str,
+) -> sqlx::Result<Option<Payment>> {
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT {COLUMNS} FROM payments WHERE merchant_txn_id = $1"
+    )))
+    .bind(merchant_txn_id)
+    .fetch_optional(db)
     .await
 }
 
@@ -186,7 +231,7 @@ fn prefixed(alias: &str) -> String {
         .join(", ")
 }
 
-/// Records that QNB was asked (so the worker rotates through links) and the latest failure.
+/// Records that SkipCash was asked (so the worker rotates through payments) and the latest failure.
 pub async fn touch(db: &PgPool, id: Uuid, last_failure: Option<&str>) -> sqlx::Result<()> {
     sqlx::query(
         "UPDATE payments SET last_failure = COALESCE($2, last_failure), updated_at = now()
@@ -207,14 +252,20 @@ pub async fn close(db: &PgPool, id: Uuid) -> sqlx::Result<()> {
     Ok(())
 }
 
-/// Marks the link paid and its booking paid. `false` if it was already paid (nothing changed).
-pub async fn mark_paid(db: &PgPool, payment: &Payment) -> sqlx::Result<bool> {
+/// Marks the payment paid and its booking paid. `false` if it was already paid (nothing
+/// changed). Works on a closed payment too: money received late still counts.
+pub async fn mark_paid(
+    db: &PgPool,
+    payment: &Payment,
+    visa_id: Option<&str>,
+) -> sqlx::Result<bool> {
     let mut tx = db.begin().await?;
     let updated = sqlx::query(
-        "UPDATE payments SET status = 'paid', paid_at = now(), updated_at = now()
+        "UPDATE payments SET status = 'paid', paid_at = now(), visa_id = COALESCE($2, visa_id), updated_at = now()
          WHERE id = $1 AND status <> 'paid'",
     )
     .bind(payment.id)
+    .bind(visa_id)
     .execute(&mut *tx)
     .await?
     .rows_affected();

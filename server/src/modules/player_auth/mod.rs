@@ -19,7 +19,8 @@ pub fn routes() -> Router<AppState> {
         .route("/login", post(handlers::login))
         .route("/signup", post(handlers::signup))
         .route("/playername-available", get(handlers::playername_available))
-        .route("/me", get(handlers::me))
+        .route("/me", get(handlers::me).delete(handlers::delete_me))
+        .route("/delete-account", post(handlers::delete_account_by_login))
 }
 
 /// Layer that rejects requests without a valid player token. Apply with `.route_layer(...)`.
