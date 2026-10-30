@@ -30,7 +30,8 @@ pub fn payment_requested(
             b.bookeo_booking_number
         ),
         format!(
-            "Please pay {amount} by {due}. If it isn't paid by then, the booking is canceled automatically."
+            "Please pay by {due}: the full {amount}, or part of it (at least {currency} 120) and the rest later, up to the start of the game. If nothing is paid by then, the booking is canceled automatically.",
+            currency = b.price_currency.as_deref().unwrap_or("QAR")
         ),
         action.to_string(),
     ];
@@ -48,7 +49,14 @@ pub fn payment_received(
     name: &str,
     b: &PayableBooking,
     p: &Payment,
+    remaining: Option<(String, String)>,
 ) -> Email {
+    let balance = match remaining {
+        Some((rest, currency)) if rest != "0.00" => format!(
+            "Still to pay: {rest} {currency}. Anyone in the group can pay it in the Havoc app until the game starts; after that, at the venue."
+        ),
+        _ => "Your booking is fully paid.".to_string(),
+    };
     let lines = [
         format!("Hi {name},"),
         format!(
@@ -63,6 +71,7 @@ pub fn payment_received(
             "Payment reference: {}.",
             p.visa_id.as_deref().unwrap_or(&p.merchant_txn_id)
         ),
+        balance,
         "See you at Havoc!".to_string(),
     ];
     build(

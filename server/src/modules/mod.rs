@@ -1,6 +1,7 @@
 //! Feature modules. Each module owns its routes, handlers, business logic and data access,
 //! and exposes a `routes()` function that is mounted here.
 
+pub mod addons;
 pub mod auth;
 pub mod avatars;
 pub mod bookings;
@@ -26,6 +27,7 @@ pub fn router(state: &AppState) -> Router<AppState> {
         .nest("/health", health::routes())
         .nest("/avatars", avatars::public_routes())
         .nest("/offer-images", offers::public_routes())
+        .nest("/addon-images", addons::public_routes())
         // The website's leaderboard (WordPress plugin); checks its own API key.
         .nest("/website", stats::website_routes())
         .nest("/auth", auth::routes())
@@ -43,7 +45,10 @@ pub fn router(state: &AppState) -> Router<AppState> {
         .nest("/stats", stats::admin_routes())
         .nest("/offers", offers::admin_routes())
         .nest("/chats", chats::admin_routes())
-        .nest("/settings", payments::admin_routes())
+        .nest(
+            "/settings",
+            payments::admin_routes().merge(addons::admin_routes()),
+        )
         .route_layer(auth::require_auth(state));
 
     // Mobile app: everything here requires a player token.

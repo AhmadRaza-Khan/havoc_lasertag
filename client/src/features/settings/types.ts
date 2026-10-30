@@ -39,3 +39,18 @@ export type SkipCashTestResult = {
   ok: boolean
   checks: { name: string; ok: boolean; message: string }[]
 }
+
+/** An add-on (Bookeo option) and its picture. One row per add-on, whichever games offer it. */
+export type Addon = {
+  /** Same on every game (the part of Bookeo's option id after the last "_"). */
+  key: string
+  name: string
+  kind: 'choice' | 'number' | 'on_off' | 'text'
+  description: string | null
+  staff_only: boolean
+  /** Names of the games that offer it. */
+  games: string[]
+  /** API path; use `apiUrl`. */
+  image_url: string | null
+  image_updated_at: string | null
+}

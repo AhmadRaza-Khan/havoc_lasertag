@@ -44,6 +44,14 @@ function SkipCashForm({ saved }: { saved: SkipCashCredentials }) {
     (saved.key_secret_set || values.key_secret.trim() !== '') &&
     (saved.webhook_key_set || values.webhook_key.trim() !== '')
   const busy = save.isPending || test.isPending || remove.isPending
+  // What's in the form isn't what the server uses yet.
+  const unsaved =
+    !saved.configured ||
+    values.environment !== saved.environment ||
+    values.client_id.trim() !== saved.client_id ||
+    values.key_id.trim() !== saved.key_id ||
+    values.key_secret.trim() !== '' ||
+    values.webhook_key.trim() !== ''
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -194,6 +202,12 @@ function SkipCashForm({ saved }: { saved: SkipCashCredentials }) {
           <span className="muted small">
             The webhook key can't be tested from here; SkipCash uses it when it calls the webhook URL.
           </span>
+          {test.data.ok && unsaved && (
+            <span className="test-save-hint">
+              <TriangleAlert size={16} aria-hidden="true" />
+              Not saved yet: press Save to turn on online payment with these credentials.
+            </span>
+          )}
         </div>
       )}
 

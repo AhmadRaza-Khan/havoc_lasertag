@@ -89,7 +89,7 @@ export default function PlayersPage() {
           <SearchInput
             value={searchInput}
             onChange={setSearchInput}
-            placeholder="Search by playername or name"
+            placeholder="Search by name, playername, email or phone"
           />
           {isFetching && !isPending && <span className="muted small">Updating…</span>}
         </div>

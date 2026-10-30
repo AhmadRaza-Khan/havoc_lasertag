@@ -43,6 +43,8 @@ pub struct GameOption {
     pub max: Option<i32>,
     /// What to preselect: a value id (choice), a number, or `"true"`/`"false"`.
     pub default: Option<String>,
+    /// The add-on's picture, if admins set one (Settings → Add-ons).
+    pub image_url: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -66,6 +68,7 @@ pub fn game_options(p: &Product) -> Vec<GameOption> {
         min: None,
         max: None,
         default: None,
+        image_url: None,
     };
     let mut out: Vec<(i32, GameOption)> = Vec::new();
     for o in &p.choice_options {

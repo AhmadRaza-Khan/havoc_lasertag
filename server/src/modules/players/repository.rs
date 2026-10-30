@@ -3,10 +3,13 @@ use uuid::Uuid;
 
 use super::{dto::ValidPlayer, model::Player};
 
-/// Lists players, newest first. `pattern` is an escaped ILIKE pattern (see `like_pattern`).
+/// Lists players, newest first. `pattern` is an escaped ILIKE pattern (see `like_pattern`)
+/// matched against the name, playername and email; `phone_digits` is matched against the
+/// phone number's digits, ignoring its formatting.
 pub async fn list(
     db: &PgPool,
     pattern: Option<&str>,
+    phone_digits: Option<&str>,
     limit: i64,
     offset: i64,
 ) -> sqlx::Result<(Vec<Player>, i64)> {
@@ -14,7 +17,8 @@ pub async fn list(
         "SELECT id, full_name, playername, phone, email, created_at, updated_at,
                 CASE WHEN avatar_updated_at IS NULL THEN NULL ELSE '/api/avatars/' || id || '?v=' || floor(extract(epoch FROM avatar_updated_at) * 1000)::bigint END AS avatar_url
          FROM players
-         WHERE id <> $4 AND ($1::text IS NULL OR playername ILIKE $1 OR full_name ILIKE $1)
+         WHERE id <> $4 AND ($1::text IS NULL OR playername ILIKE $1 OR full_name ILIKE $1
+             OR email ILIKE $1 OR regexp_replace(phone, '\\D', '', 'g') LIKE '%' || $5 || '%')
          ORDER BY created_at DESC
          LIMIT $2 OFFSET $3",
     )
@@ -22,15 +26,18 @@ pub async fn list(
     .bind(limit)
     .bind(offset)
     .bind(super::HAVOC_ADMIN_ID)
+    .bind(phone_digits)
     .fetch_all(db)
     .await?;
 
     let total = sqlx::query_scalar(
         "SELECT COUNT(*) FROM players
-         WHERE id <> $2 AND ($1::text IS NULL OR playername ILIKE $1 OR full_name ILIKE $1)",
+         WHERE id <> $2 AND ($1::text IS NULL OR playername ILIKE $1 OR full_name ILIKE $1
+             OR email ILIKE $1 OR regexp_replace(phone, '\\D', '', 'g') LIKE '%' || $3 || '%')",
     )
     .bind(pattern)
     .bind(super::HAVOC_ADMIN_ID)
+    .bind(phone_digits)
     .fetch_one(db)
     .await?;
 

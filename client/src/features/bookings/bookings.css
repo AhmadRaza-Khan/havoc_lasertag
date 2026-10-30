@@ -273,12 +273,44 @@
   white-space: nowrap;
 }
 
+.badge-partial {
+  background: color-mix(in srgb, var(--success) 10%, var(--warning-bg));
+  color: var(--warning);
+  white-space: nowrap;
+}
+
 /* Add-ons (Bookeo options) */
 
 .addons {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+/* An add-on with its picture (Settings → Add-on pictures) beside it. */
+.addon-card.has-image {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  align-items: start;
+  gap: 14px;
+}
+
+.addon-picture {
+  width: 112px;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+@media (max-width: 560px) {
+  .addon-card.has-image {
+    grid-template-columns: 72px 1fr;
+  }
+
+  .addon-picture {
+    width: 72px;
+  }
 }
 
 .addon {

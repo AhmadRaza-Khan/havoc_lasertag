@@ -1,4 +1,4 @@
-//! Mobile app: a player's own bookings.
+//! Mobile app: a player's own bookings and the ones other players added them to.
 
 use axum::{
     Json,
@@ -35,8 +35,10 @@ pub async fn list(
     let tz = state.config.bookeo.timezone;
     let others = service::other_players_lookup(&state, &page.items).await?;
     Ok(Json(page.map(|r| {
-        let ids = r.other_players.clone();
-        BookingResponse::from_row(r, tz).with_other_players(&ids, &others)
+        let (ids, owner) = (r.other_players.clone(), r.player_id);
+        BookingResponse::from_row(r, tz)
+            .with_other_players(&ids, &others)
+            .with_player_from(owner, &others)
     })))
 }
 
@@ -51,7 +53,8 @@ pub async fn get(
 
 async fn respond(state: &AppState, row: BookingRow) -> AppResult<BookingResponse> {
     let others = service::other_players_lookup(state, [&row]).await?;
-    let ids = row.other_players.clone();
+    let (ids, owner) = (row.other_players.clone(), row.player_id);
     Ok(BookingResponse::from_row(row, state.config.bookeo.timezone)
-        .with_other_players(&ids, &others))
+        .with_other_players(&ids, &others)
+        .with_player_from(owner, &others))
 }

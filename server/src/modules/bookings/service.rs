@@ -385,14 +385,15 @@ async fn check_other_players(state: &AppState, player_id: Uuid, others: &[Uuid])
     Ok(())
 }
 
-/// Name/playername of every other player referenced by `rows`, in one query.
+/// Name/playername of every player referenced by `rows` (their players and other players), in
+/// one query.
 pub async fn other_players_lookup<'a>(
     state: &AppState,
     rows: impl IntoIterator<Item = &'a BookingRow>,
 ) -> AppResult<HashMap<Uuid, PlayerSummary>> {
     let ids: Vec<Uuid> = rows
         .into_iter()
-        .flat_map(|r| r.other_players.iter().copied())
+        .flat_map(|r| r.other_players.iter().copied().chain([r.player_id]))
         .collect::<HashSet<_>>()
         .into_iter()
         .collect();

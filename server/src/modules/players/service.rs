@@ -20,16 +20,33 @@ pub async fn list(db: &PgPool, query: ListQuery) -> AppResult<Paginated<Player>>
         page: query.page,
         per_page: query.per_page,
     };
-    let pattern = query
+    let search = query
         .search
         .as_deref()
         .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(like_pattern);
+        .filter(|s| !s.is_empty());
+    let pattern = search.map(like_pattern);
+    let phone = search.and_then(phone_digits);
 
-    let (items, total) =
-        repository::list(db, pattern.as_deref(), params.per_page(), params.offset()).await?;
+    let (items, total) = repository::list(
+        db,
+        pattern.as_deref(),
+        phone.as_deref(),
+        params.per_page(),
+        params.offset(),
+    )
+    .await?;
     Ok(Paginated::new(items, total, &params))
+}
+
+/// The digits of a search that looks like a phone number (only digits, spaces, `+`, `-`,
+/// brackets; at least 3 digits), so `5555 1234` finds `+974 5555 1234` whatever the formatting.
+fn phone_digits(search: &str) -> Option<String> {
+    let phone_like = search
+        .chars()
+        .all(|c| c.is_ascii_digit() || matches!(c, ' ' | '+' | '-' | '(' | ')'));
+    let digits: String = search.chars().filter(char::is_ascii_digit).collect();
+    (phone_like && digits.len() >= 3).then_some(digits)
 }
 
 pub async fn get(db: &PgPool, id: Uuid) -> AppResult<Player> {
@@ -122,5 +139,23 @@ fn map_unique_violation(e: sqlx::Error) -> AppError {
             AppError::Conflict("Playername is already taken".into())
         }
         _ => AppError::Database(e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn phone_searches_match_digits_only() {
+        assert_eq!(phone_digits("5555 1234").as_deref(), Some("55551234"));
+        assert_eq!(
+            phone_digits("+974 (5555)-1234").as_deref(),
+            Some("97455551234")
+        );
+        // Too short, or not a phone number at all.
+        assert_eq!(phone_digits("55"), None);
+        assert_eq!(phone_digits("player123"), None);
+        assert_eq!(phone_digits("ali"), None);
     }
 }

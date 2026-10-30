@@ -4,6 +4,7 @@ use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode, header::AUTHORIZATION},
 };
+use serde::Deserialize;
 use uuid::Uuid;
 
 use super::{
@@ -56,13 +57,31 @@ pub async fn test_skipcash(
 
 // --- Mobile app ---
 
-/// Gets a SkipCash payment page to open in a WebView.
+/// Optional body of `POST .../payment`.
+#[derive(Debug, Default, Deserialize)]
+pub struct StartPayment {
+    /// How much to pay now: at least QAR 120 (or the rest, if less is left), at most the rest.
+    /// Omit to pay the whole rest.
+    pub amount: Option<String>,
+}
+
+/// Gets a SkipCash payment page to open in a WebView, for the whole rest or part of it. The
+/// booking's player and its other players can all pay.
 pub async fn start(
     State(state): State<AppState>,
     player: AuthPlayer,
     Path(id): Path<Uuid>,
+    body: Bytes,
 ) -> AppResult<Json<PaymentView>> {
-    Ok(Json(service::start(&state, id, player.id).await?))
+    let input: StartPayment = if body.iter().all(u8::is_ascii_whitespace) {
+        StartPayment::default()
+    } else {
+        serde_json::from_slice(&body)
+            .map_err(|e| AppError::BadRequest(format!("Invalid request body: {e}")))?
+    };
+    Ok(Json(
+        service::start(&state, id, player.id, input.amount.as_deref()).await?,
+    ))
 }
 
 /// Payment state, confirmed with SkipCash. Poll while the payment page is open.

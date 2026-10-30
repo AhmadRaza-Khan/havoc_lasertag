@@ -197,3 +197,85 @@
   font-size: 0.8rem;
   font-weight: 400;
 }
+
+.test-save-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--warning);
+  font-weight: 600;
+}
+
+/* Add-on pictures */
+
+.addon-images {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.addon-image-row {
+  display: grid;
+  grid-template-columns: 72px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+}
+
+.addon-image-row + .addon-image-row {
+  border-top: 1px solid var(--border);
+}
+
+.addon-image-frame {
+  width: 72px;
+  height: 54px;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--neutral-bg);
+}
+
+.addon-image-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.addon-image-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.addon-image-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.addon-image-remove {
+  color: var(--danger);
+}
+
+@media (max-width: 560px) {
+  .addon-image-row {
+    grid-template-columns: 64px 1fr;
+  }
+
+  .addon-image-frame {
+    width: 64px;
+    height: 48px;
+  }
+
+  .addon-image-actions {
+    grid-column: 1 / -1;
+  }
+}

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { CircleCheck, TriangleAlert } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { AddonImagesSettings } from '../components/AddonImagesSettings'
 import { SkipCashSettings } from '../components/SkipCashSettings'
 import { usePaymentSettings, useSavePaymentSettings } from '../hooks'
 import type { PaymentMode, PaymentSettings } from '../types'
@@ -41,6 +42,9 @@ export default function SettingsPage() {
       </div>
       <div className="panel panel-padded settings-panel">
         <SkipCashSettings />
+      </div>
+      <div className="panel panel-padded settings-panel">
+        <AddonImagesSettings />
       </div>
     </>
   )
@@ -143,6 +147,11 @@ function PaymentSettingsForm({ settings }: { settings: PaymentSettings }) {
 
       <ul className="settings-list muted small">
         <li>A booking is never left unpaid past the start of its game.</li>
+        <li>
+          Customers can pay in full or in part (at least QAR 120). Once something is paid the
+          booking is kept: the rest can be paid in the app, also by the other players in the
+          group, until the game starts, and after that at the venue.
+        </li>
         <li>
           Customers are emailed when payment is due (pay later), when it's received, and when an
           unpaid booking is canceled.

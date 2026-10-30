@@ -201,11 +201,14 @@ pub struct BookingResponse {
     /// Add-ons on the booking, as `{id, name, value}` (choice: the value's name; on/off:
     /// "true"/"false").
     pub options: Vec<BookingOption>,
-    /// `not_required` (nothing to pay online), `unpaid` or `paid`.
+    /// `not_required` (nothing to pay online), `unpaid`, `partially_paid` (the rest can be paid
+    /// online until the game starts, then at the venue) or `paid`.
     pub payment_status: String,
+    /// Paid online so far (by anyone in the group), e.g. "120.00".
+    pub amount_paid: String,
     /// Unpaid bookings are canceled after this. Business timezone.
     pub payment_due_at: Option<DateTime<FixedOffset>>,
-    /// Included in admin responses only.
+    /// The player who made the booking. Players also see bookings others added them to.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub player: Option<PlayerSummary>,
     /// Other registered players in the group (deleted players are left out).
@@ -246,6 +249,7 @@ impl BookingResponse {
             price,
             options: row.options.0,
             payment_status: row.payment_status,
+            amount_paid: row.amount_paid,
             payment_due_at: row
                 .payment_due_at
                 .map(|d| d.with_timezone(&tz).fixed_offset()),
@@ -266,6 +270,16 @@ impl BookingResponse {
             .iter()
             .filter_map(|id| lookup.get(id).cloned())
             .collect();
+        self
+    }
+
+    /// Fills `player` (who made the booking) from `lookup`.
+    pub fn with_player_from(
+        mut self,
+        player_id: Uuid,
+        lookup: &std::collections::HashMap<Uuid, PlayerSummary>,
+    ) -> Self {
+        self.player = lookup.get(&player_id).cloned();
         self
     }
 

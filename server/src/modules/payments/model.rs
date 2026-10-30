@@ -35,6 +35,7 @@ pub struct PaymentSettings {
 #[derive(Debug, Clone, FromRow)]
 pub struct PayableBooking {
     pub id: Uuid,
+    /// The player who made the booking.
     pub player_id: Uuid,
     pub bookeo_booking_number: String,
     pub product_name: String,
@@ -42,8 +43,10 @@ pub struct PayableBooking {
     pub status: String,
     pub price_amount: Option<String>,
     pub price_currency: Option<String>,
-    /// `not_required`, `unpaid` or `paid`.
+    /// `not_required`, `unpaid`, `partially_paid` or `paid`.
     pub payment_status: String,
+    /// Paid so far, e.g. "120.00".
+    pub amount_paid: String,
     pub payment_mode: Option<PaymentMode>,
     pub payment_due_at: Option<DateTime<Utc>>,
 }
@@ -53,6 +56,8 @@ pub struct PayableBooking {
 pub struct Payment {
     pub id: Uuid,
     pub booking_id: Uuid,
+    /// Who is paying: the booking's player or one of its other players.
+    pub payer_id: Option<Uuid>,
     pub merchant_txn_id: String,
     /// SkipCash's payment id.
     pub provider_payment_id: Option<String>,

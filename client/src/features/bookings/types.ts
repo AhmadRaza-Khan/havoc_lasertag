@@ -1,7 +1,10 @@
 export type BookingStatus = 'confirmed' | 'pending' | 'canceled'
 
-/** Online payment (app bookings). `not_required`: nothing to pay online, e.g. staff bookings. */
-export type PaymentStatus = 'not_required' | 'unpaid' | 'paid'
+/**
+ * Online payment (app bookings). `not_required`: nothing to pay online, e.g. staff bookings.
+ * `partially_paid`: the rest can be paid in the app until the game starts, then at the venue.
+ */
+export type PaymentStatus = 'not_required' | 'unpaid' | 'partially_paid' | 'paid'
 
 export type Booking = {
   id: string
@@ -17,6 +20,8 @@ export type Booking = {
   /** Add-ons as stored in Bookeo (choice: the value's name; on/off: "true"/"false"). */
   options: BookingOption[]
   payment_status: PaymentStatus
+  /** Paid online so far, by the player and the other players, e.g. "120.00". */
+  amount_paid: string
   /** Unpaid bookings are canceled automatically after this. */
   payment_due_at: string | null
   player: { id: string; full_name: string; playername: string }

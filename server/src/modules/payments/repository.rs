@@ -45,15 +45,18 @@ pub async fn lock_booking(
     Ok(())
 }
 
+/// The booking; with `player_id`, only if that player made it or is one of its other players.
 pub async fn booking(
     db: &PgPool,
     id: Uuid,
     player_id: Option<Uuid>,
 ) -> sqlx::Result<Option<PayableBooking>> {
     sqlx::query_as(
-        "SELECT id, player_id, bookeo_booking_number, product_name, start_time, status,
-                price_amount, price_currency, payment_status, payment_mode, payment_due_at
-         FROM bookings WHERE id = $1 AND ($2::uuid IS NULL OR player_id = $2)",
+        "SELECT id, player_id, bookeo_booking_number, product_name, start_time,
+                status, price_amount, price_currency, payment_status, amount_paid::text AS amount_paid,
+                payment_mode, payment_due_at
+         FROM bookings
+         WHERE id = $1 AND ($2::uuid IS NULL OR player_id = $2 OR $2 = ANY(other_players))",
     )
     .bind(id)
     .bind(player_id)
@@ -96,21 +99,23 @@ pub async fn overdue_bookings(db: &PgPool, limit: i64) -> sqlx::Result<Vec<Uuid>
 // Payments
 // ---------------------------------------------------------------------------
 
-const COLUMNS: &str = "id, booking_id, merchant_txn_id, provider_payment_id, visa_id, pay_url, amount, \
+const COLUMNS: &str = "id, booking_id, payer_id, merchant_txn_id, provider_payment_id, visa_id, pay_url, amount, \
     currency, status, last_failure, paid_at, bookeo_payment_id, created_at";
 
 /// Reserves a payment row (and our transaction id) before calling SkipCash.
 pub async fn insert(
     db: &PgPool,
     booking_id: Uuid,
+    payer_id: Uuid,
     amount: &str,
     currency: &str,
 ) -> sqlx::Result<Payment> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "INSERT INTO payments (booking_id, amount, currency) VALUES ($1, $2, $3)
+        "INSERT INTO payments (booking_id, payer_id, amount, currency) VALUES ($1, $2, $3, $4)
          RETURNING {COLUMNS}"
     )))
     .bind(booking_id)
+    .bind(payer_id)
     .bind(amount)
     .bind(currency)
     .fetch_one(db)
@@ -146,9 +151,11 @@ pub async fn open_for_booking(db: &PgPool, booking_id: Uuid) -> sqlx::Result<Vec
     .await
 }
 
-pub async fn paid_for_booking(db: &PgPool, booking_id: Uuid) -> sqlx::Result<Option<Payment>> {
+/// The booking's latest paid payment.
+pub async fn last_paid(db: &PgPool, booking_id: Uuid) -> sqlx::Result<Option<Payment>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "SELECT {COLUMNS} FROM payments WHERE booking_id = $1 AND status = 'paid'"
+        "SELECT {COLUMNS} FROM payments WHERE booking_id = $1 AND status = 'paid'
+         ORDER BY paid_at DESC LIMIT 1"
     )))
     .bind(booking_id)
     .fetch_optional(db)
@@ -252,8 +259,9 @@ pub async fn close(db: &PgPool, id: Uuid) -> sqlx::Result<()> {
     Ok(())
 }
 
-/// Marks the payment paid and its booking paid. `false` if it was already paid (nothing
-/// changed). Works on a closed payment too: money received late still counts.
+/// Marks the payment paid and updates its booking's total paid and status (`paid` once the
+/// price is covered, else `partially_paid`). `false` if it was already paid (nothing changed).
+/// Works on a closed payment too: money received late still counts.
 pub async fn mark_paid(
     db: &PgPool,
     payment: &Payment,
@@ -272,10 +280,22 @@ pub async fn mark_paid(
     if updated == 0 {
         return Ok(false);
     }
-    sqlx::query("UPDATE bookings SET payment_status = 'paid', updated_at = now() WHERE id = $1")
-        .bind(payment.booking_id)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(
+        "WITH paid AS (
+             SELECT COALESCE(SUM(amount::numeric), 0) AS total
+             FROM payments WHERE booking_id = $1 AND status = 'paid'
+         )
+         UPDATE bookings b SET
+             amount_paid = paid.total,
+             payment_status = CASE
+                 WHEN b.price_amount IS NOT NULL AND paid.total >= b.price_amount::numeric THEN 'paid'
+                 ELSE 'partially_paid' END,
+             updated_at = now()
+         FROM paid WHERE b.id = $1",
+    )
+    .bind(payment.booking_id)
+    .execute(&mut *tx)
+    .await?;
     tx.commit().await?;
     Ok(true)
 }

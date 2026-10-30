@@ -155,6 +155,10 @@ player bookings notify staff. Customers get Bookeo's emails when they have an em
 | PUT | `/api/settings/skipcash` | admin | `{environment: sandbox\|production, client_id, key_id, key_secret, webhook_key}`; empty secrets keep the saved ones. Takes effect immediately |
 | DELETE | `/api/settings/skipcash` | admin | Removes the credentials: online payment off |
 | POST | `/api/settings/skipcash/test` | admin | Same body as PUT, not saved. Creates a 1.00 QAR test payment (checks key ID + secret) and reads it back (checks client ID) → `{ok, checks: [{name, ok, message}]}` |
+| GET | `/api/settings/addons` | admin | every add-on Bookeo offers (one row per add-on, whichever games offer it): `[{key, name, kind, description, staff_only, games, image_url}]`. `key` is the part of Bookeo's option id after the last `_`, the same on every game |
+| PUT | `/api/settings/addons/{key}/image` | admin | `multipart/form-data`, field `file` (JPEG/PNG/WebP, max 900 KB) → the add-ons list. One picture covers the add-on on every game. Add-on prices stay Bookeo's |
+| DELETE | `/api/settings/addons/{key}/image` | admin | removes the picture → the add-ons list |
+| GET | `/api/addon-images/{key}?v=` | public | the picture (versioned URL, cached for a year). Games' `options[].image_url` points here |
 | GET | `/api/stats/leaderboard` | admin | general report: every player's all-time totals, ranked by points |
 | GET | `/api/stats/players/{id}` | admin | one player's all-time totals (the admin panel's player stats page) |
 | GET | `/api/stats/players/{id}/games?page=&per_page=` | admin | that player's game records, newest first, with everything from the reports |
@@ -183,11 +187,11 @@ player bookings notify staff. Customers get Bookeo's emails when they have an em
 | GET | `/api/player/games` | bookable games from Bookeo (cached 10 min): price, duration, group size, `requires_approval`, and `options` — the game's add-ons (Bookeo options, including the business's global ones): `{id, kind: choice\|number\|on_off\|text, name, description (plain text), staff_only, required, values[{id, name, description}], min, max, default}` in display order. Bookeo adds their prices to the booking |
 | GET | `/api/player/games/{product_id}/slots?from=YYYY-MM-DD&to=YYYY-MM-DD` | open slots with `event_id` and seats left. No dates = rest of today; `from` only = that day; max 31 days. Dates are in the business timezone |
 | POST | `/api/player/bookings` | `{product_id, event_id, num_people, other_player_ids?, options?: [{id, value}]}` → booking (201). Add-on values: the choice value's `id`, a number, `"true"`/`"false"`, or text; staff-only add-ons are refused. Bookings return `options: [{id, name, value}]` (choice: the value's name). Bookeo rejections (slot full, …) → 422 |
-| GET | `/api/player/bookings?when=upcoming\|past&page=&per_page=` | the player's own bookings |
+| GET | `/api/player/bookings?when=upcoming\|past&page=&per_page=` | the player's bookings: their own and the ones other players added them to (`player` = who made it) |
 | GET | `/api/player/bookings/{id}` | one booking, status refreshed from Bookeo |
-| POST | `/api/player/bookings/{id}/payment` | SkipCash payment page for the booking → `{status, pay_url, amount, currency, due_at, last_failure, …}`. Reuses the open payment while it's payable; a new one after it expired or failed. 409 if nothing to pay / canceled / time to pay passed |
-| GET | `/api/player/bookings/{id}/payment` | payment state, confirmed with SkipCash — poll while the payment page is open |
-| DELETE | `/api/player/bookings/{id}/payment` | the customer closed the payment page unpaid: cancels a *pay now* booking at once (a last-second payment still counts); *pay later* bookings are unaffected |
+| POST | `/api/player/bookings/{id}/payment` | body `{amount?}` (omit = the whole rest): SkipCash page in the caller's name → `{status, amount, amount_paid, remaining, min_payment, can_pay, is_owner, pay_url, paying_amount, due_at, last_failure, …}`. The booking's player and its other players can all pay. `amount` must be at least `min_payment` (QAR 120, or the rest if less is left) and at most `remaining` (else 400). Reuses the caller's open page for the same amount. 409 if nothing to pay / canceled / time to pay passed / game started |
+| GET | `/api/player/bookings/{id}/payment` | payment state for the caller, their open page confirmed with SkipCash — poll while the payment page is open |
+| DELETE | `/api/player/bookings/{id}/payment` | the caller closed the payment page unpaid: if they made the booking, nothing is paid yet and it's *pay now*, the booking is canceled at once (a last-second payment still counts); otherwise nothing changes |
 
 | GET | `/api/player/stats` | my all-time totals and leaderboard `position` (`null` until I've played), plus `details` (below) |
 | GET | `/api/player/stats/leaderboard` | general leaderboard any player can see: top 30 by all-time points, plus `me` (my row, even if lower) and `total_ranked`. Others appear by playername only (no full name/email/phone) |
@@ -212,13 +216,23 @@ Display names: the admin panel and the app show `points` as **Score**, `frags` a
 
 Bookings made in the app are paid by card on SkipCash's hosted payment page (SkipCash Integration
 Manual v1.4, "Card Checkout API"), opened in a WebView. Card details never reach the app or this
-server. Booking responses carry `payment_status` (`not_required` | `unpaid` | `paid`) and
-`payment_due_at`.
+server. Booking responses carry `payment_status` (`not_required` | `unpaid` | `partially_paid` |
+`paid`), `amount_paid` and `payment_due_at`.
+
+**Paying in parts.** A booking can be paid in full or in several payments of at least QAR 120
+(or the rest, if less is left), by its player or by any of its other players (who see the booking
+in their app). The first payment must come by the deadline (Settings: *pay now* / *pay later*)
+or the booking is canceled. Once something is paid the booking is `partially_paid` and is never
+canceled for non-payment: the rest can be paid in the app until the game starts, and after that
+at the venue. Each payment is recorded in Bookeo separately. If a booking's price changes, its
+status follows (`paid` ↔ `partially_paid`); two players paying the rest at the same moment can
+overpay, which is logged for a refund from the SkipCash portal.
 
 1. Create the booking (`POST /api/player/bookings`). If `payment_status` is `unpaid`:
-2. `POST /api/player/bookings/{id}/payment` → open `pay_url` in a WebView.
-3. While it's open, poll `GET …/payment` every 3–5 s. Close the WebView when `status` is `paid`
-   (show success). If `last_failure` is set, show it and offer "Try again" (repeat step 2).
+2. Show *Pay full* / *Pay partially* (amount between `min_payment` and `remaining`), then
+   `POST /api/player/bookings/{id}/payment` with `{amount}` → open `pay_url` in a WebView.
+3. While it's open, poll `GET …/payment` every 3–5 s. Close the WebView when `amount_paid` goes
+   up (show success, and what's `remaining`). If `last_failure` is set, show it and offer "Try again" (repeat step 2).
    Don't read the WebView's URL or page to decide the outcome: only the server's answer counts.
 4. If the customer closes the payment page without paying, call `DELETE …/payment`. In *pay
    now* mode that cancels the booking right away; in *pay later* mode it stays `unpaid` until
@@ -227,8 +241,9 @@ server. Booking responses carry `payment_status` (`not_required` | `unpaid` | `p
 The server creates each payment with `POST /api/v1/payments` (signed: HMAC-SHA256 of the fields
 with the key secret) with the player's name, email and phone, our reference as `transactionId`
 and the booking number as `custom1`, and confirms it with `GET /api/v1/payments/{id}` (client
-ID). When it's paid, the booking is marked `paid`, the payment is recorded in Bookeo
-(`creditCard`, comment `SkipCash payment <id>`) and a receipt is emailed.
+ID). When it's paid, the booking's `amount_paid` and status are updated, the payment is recorded
+in Bookeo (`creditCard`, comment `SkipCash payment <id> (<ref>), paid by @<playername>`) and a
+receipt (with what's left to pay) is emailed to whoever paid.
 
 **Webhook**: set `https://<api domain>/api/webhooks/skipcash` as the webhook URL in the SkipCash
 portal (Sandbox and Production → Credentials). Calls are verified with the saved webhook key

@@ -29,6 +29,8 @@ export type GameOption = {
   max: number | null
   /** Value to preselect (value id, number or "true"/"false"). */
   default: string | null
+  /** Picture set in Settings → Add-on pictures (API path; use `apiUrl`). */
+  image_url: string | null
 }
 
 export type Slot = {

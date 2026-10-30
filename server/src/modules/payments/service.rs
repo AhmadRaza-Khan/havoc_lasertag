@@ -106,7 +106,7 @@ pub async fn on_booking_created(state: &AppState, booking_id: Uuid) -> AppResult
     // "Pay later": a link up front, so the email can carry it. "Pay now": the app opens the
     // payment page itself; the email just states the deadline.
     let link = match settings.mode {
-        PaymentMode::PayLater => new_link(state, &skipcash, &booking)
+        PaymentMode::PayLater => new_link(state, &skipcash, &booking, booking.player_id, None)
             .await
             .inspect_err(|e| tracing::error!(%booking_id, "could not create pay link: {e}"))
             .ok()
@@ -124,33 +124,58 @@ pub async fn on_booking_created(state: &AppState, booking_id: Uuid) -> AppResult
 // Mobile app
 // ---------------------------------------------------------------------------
 
-/// What the app needs to show and pay a booking.
+/// Least a single payment can be, in cents (QAR 120), unless less than that is left to pay.
+pub const MIN_PAYMENT_CENTS: i64 = 12_000;
+
+/// What the app needs to show and pay a booking, for the player asking.
 #[derive(Debug, Serialize)]
 pub struct PaymentView {
     pub booking_id: Uuid,
-    /// `unpaid`, `paid` or `not_required`.
+    /// `unpaid`, `partially_paid`, `paid` or `not_required`.
     pub status: String,
     pub mode: Option<PaymentMode>,
+    /// The booking's price.
     pub amount: Option<String>,
     pub currency: Option<String>,
-    /// Unpaid bookings are canceled after this. Business timezone.
+    /// Paid so far, by anyone in the group.
+    pub amount_paid: Option<String>,
+    /// Still to pay.
+    pub remaining: Option<String>,
+    /// Least the next payment can be: QAR 120, or the rest if less is left.
+    pub min_payment: Option<String>,
+    /// Whether this player can pay online now.
+    pub can_pay: bool,
+    /// Whether this player made the booking (else they're one of its other players).
+    pub is_owner: bool,
+    /// Unpaid: the booking is canceled if nothing is paid by then. Partly paid: online payment
+    /// closes then (the game's start); the rest is paid at the venue. Business timezone.
     pub due_at: Option<DateTime<FixedOffset>>,
-    /// SkipCash's payment page, to open in a WebView. Only while unpaid.
+    /// This player's payment page, to open in a WebView, while they have one open.
     pub pay_url: Option<String>,
-    /// Why the latest attempt failed (e.g. card declined), if it did.
+    /// The amount of that page.
+    pub paying_amount: Option<String>,
+    /// Why this player's latest attempt failed (e.g. card declined), if it did.
     pub last_failure: Option<String>,
+    /// The latest payment's time.
     pub paid_at: Option<DateTime<Utc>>,
 }
 
-/// Returns a payment page for the booking: the open one if it's still good, else a new one.
-pub async fn start(state: &AppState, booking_id: Uuid, player_id: Uuid) -> AppResult<PaymentView> {
+/// Returns a payment page for `amount` (the whole rest if `None`) in this player's name: their
+/// open one if it's still good, else a new one. The booking's player and its other players can
+/// all pay towards it.
+pub async fn start(
+    state: &AppState,
+    booking_id: Uuid,
+    player_id: Uuid,
+    amount: Option<&str>,
+) -> AppResult<PaymentView> {
     let skipcash = state.skipcash().ok_or_else(payment_off)?;
     let mut lock = state.db.begin().await?;
     repository::lock_booking(&mut lock, booking_id).await?;
 
     let booking = find(state, booking_id, Some(player_id)).await?;
     match booking.payment_status.as_str() {
-        "paid" => return view(state, booking).await,
+        "paid" => return view(state, booking, player_id).await,
         "not_required" => {
             return Err(AppError::Conflict(
                 "This booking has nothing to pay online".into(),
@@ -161,22 +186,36 @@ pub async fn start(state: &AppState, booking_id: Uuid, player_id: Uuid) -> AppRe
     if booking.status == "canceled" {
         return Err(AppError::Conflict("This booking was canceled".into()));
     }
-    if booking.payment_due_at.is_some_and(|due| due <= Utc::now()) {
+    if booking.payment_status == "unpaid"
+        && booking.payment_due_at.is_some_and(|due| due <= Utc::now())
+    {
         return Err(AppError::Conflict(
             "The time to pay for this booking has passed".into(),
         ));
     }
-    let (amount, _) = payable_amount(&booking)
+    if booking.start_time <= Utc::now() {
+        return Err(AppError::Conflict(
+            "Online payment closed when the game started. Please pay the rest at the venue.".into(),
+        ));
+    }
+    let balance = Balance::of(&booking)
         .ok_or_else(|| AppError::Conflict("This booking has nothing to pay online".into()))?;
+    if balance.remaining() == 0 {
+        return view(state, booking, player_id).await;
+    }
+    let amount = balance.check_payment(amount)?;
 
-    // Reuse the newest open payment while it's still payable and for the right amount; stop
-    // using the rest.
+    // Reuse this player's newest open page while it's still payable and for the same amount;
+    // stop using their others. Other players' pages are theirs: left alone.
     let mut reusable = None;
     for p in repository::open_for_booking(&state.db, booking_id).await? {
+        if p.payer_id != Some(player_id) {
+            continue;
+        }
         if reusable.is_none() && p.amount == amount && p.pay_url.is_some() {
             match check(state, &skipcash, &p).await? {
                 PaymentState::Paid { .. } => {
-                    return view(state, refreshed(state, booking_id).await?).await;
+                    return view(state, refreshed(state, booking_id).await?, player_id).await;
                 }
                 PaymentState::Pending => {
                     reusable = Some(p);
@@ -187,66 +226,94 @@ pub async fn start(state: &AppState, booking_id: Uuid, player_id: Uuid) -> AppRe
             }
         }
         if retire(state, &skipcash, &p).await? {
-            return view(state, refreshed(state, booking_id).await?).await;
+            return view(state, refreshed(state, booking_id).await?, player_id).await;
         }
     }
     if reusable.is_none() {
-        new_link(state, &skipcash, &booking).await?;
+        new_link(state, &skipcash, &booking, player_id, Some(&amount)).await?;
     }
 
     lock.commit().await?;
-    view(state, refreshed(state, booking_id).await?).await
+    view(state, refreshed(state, booking_id).await?, player_id).await
 }
 
-/// The booking's payment state, confirmed with SkipCash while unpaid. The app polls this
-/// while the payment page is open.
+/// The booking's payment state, with this player's open payment confirmed with SkipCash. The
+/// app polls this while the payment page is open.
 pub async fn status(state: &AppState, booking_id: Uuid, player_id: Uuid) -> AppResult<PaymentView> {
     let booking = find(state, booking_id, Some(player_id)).await?;
-    if booking.payment_status == "unpaid"
+    if is_payable(&booking)
         && let Some(skipcash) = state.skipcash()
-        && let Some(p) = repository::open_for_booking(&state.db, booking_id)
-            .await?
-            .into_iter()
-            .next()
+        && let Some(p) = own_open_payment(state, booking_id, player_id).await?
     {
         check(state, &skipcash, &p).await?;
-        return view(state, refreshed(state, booking_id).await?).await;
+        return view(state, refreshed(state, booking_id).await?, player_id).await;
     }
-    view(state, booking).await
+    view(state, booking, player_id).await
 }
 
-async fn view(state: &AppState, booking: PayableBooking) -> AppResult<PaymentView> {
+async fn view(
+    state: &AppState,
+    booking: PayableBooking,
+    player_id: Uuid,
+) -> AppResult<PaymentView> {
     let tz = state.config.bookeo.timezone;
-    let amount = payable_amount(&booking);
-    let (pay_url, last_failure) = if booking.payment_status == "unpaid" {
-        repository::open_for_booking(&state.db, booking.id)
-            .await?
-            .into_iter()
-            .next()
-            .map(|p| (p.pay_url, p.last_failure))
-            .unwrap_or_default()
+    let balance = Balance::of(&booking);
+    let open = if is_payable(&booking) {
+        own_open_payment(state, booking.id, player_id).await?
     } else {
-        (None, None)
+        None
     };
-    let paid_at = match booking.payment_status.as_str() {
-        "paid" => repository::paid_for_booking(&state.db, booking.id)
-            .await?
-            .and_then(|p| p.paid_at),
-        _ => None,
+    let paid_at = match repository::last_paid(&state.db, booking.id).await? {
+        Some(p) => p.paid_at,
+        None => None,
+    };
+    let now = Utc::now();
+    let can_pay = state.skipcash().is_some()
+        && is_payable(&booking)
+        && booking.status != "canceled"
+        && booking.start_time > now
+        && !(booking.payment_status == "unpaid"
+            && booking.payment_due_at.is_some_and(|d| d <= now))
+        && balance.as_ref().is_some_and(|b| b.remaining() > 0);
+    // Partly paid: no more cancellation; online payment is open until the game starts.
+    let due_at = match booking.payment_status.as_str() {
+        "partially_paid" => Some(booking.start_time),
+        _ => booking.payment_due_at,
     };
     Ok(PaymentView {
         booking_id: booking.id,
         status: booking.payment_status,
         mode: booking.payment_mode,
-        amount: amount.as_ref().map(|(a, _)| a.clone()),
-        currency: amount.map(|(_, c)| c),
-        due_at: booking
-            .payment_due_at
-            .map(|d| d.with_timezone(&tz).fixed_offset()),
-        pay_url,
-        last_failure,
+        amount: balance.as_ref().map(|b| from_cents(b.total)),
+        currency: balance.as_ref().map(|b| b.currency.clone()),
+        amount_paid: balance.as_ref().map(|b| from_cents(b.paid)),
+        remaining: balance.as_ref().map(|b| from_cents(b.remaining())),
+        min_payment: balance.as_ref().map(|b| from_cents(b.min_payment())),
+        can_pay,
+        is_owner: booking.player_id == player_id,
+        due_at: due_at.map(|d| d.with_timezone(&tz).fixed_offset()),
+        pay_url: open.as_ref().and_then(|p| p.pay_url.clone()),
+        paying_amount: open.as_ref().map(|p| p.amount.clone()),
+        last_failure: open.and_then(|p| p.last_failure),
         paid_at,
     })
+}
+
+/// Unpaid or partly paid: more can be paid.
+fn is_payable(b: &PayableBooking) -> bool {
+    matches!(b.payment_status.as_str(), "unpaid" | "partially_paid")
+}
+
+/// This player's newest open payment page for the booking.
+async fn own_open_payment(
+    state: &AppState,
+    booking_id: Uuid,
+    player_id: Uuid,
+) -> AppResult<Option<Payment>> {
+    Ok(repository::open_for_booking(&state.db, booking_id)
+        .await?
+        .into_iter()
+        .find(|p| p.payer_id == Some(player_id)))
 }
 
 // ---------------------------------------------------------------------------
@@ -347,9 +414,10 @@ pub async fn expire(state: &AppState, booking_id: Uuid) -> AppResult<()> {
     Ok(())
 }
 
-/// The customer closed the payment page without paying. In "pay now" mode the booking is
-/// canceled right away (a payment completed at the last second still counts). In "pay later"
-/// mode nothing changes: they can pay until the deadline.
+/// A player closed the payment page without paying. If it's the booking's own player and
+/// nothing is paid yet in "pay now" mode, the booking is canceled right away (a payment
+/// completed at the last second still counts). Otherwise nothing changes: in "pay later" mode
+/// they can pay until the deadline, and a partly paid booking stays booked.
 pub async fn abandon(
     state: &AppState,
     booking_id: Uuid,
@@ -358,14 +426,15 @@ pub async fn abandon(
     let mut lock = state.db.begin().await?;
     repository::lock_booking(&mut lock, booking_id).await?;
     let booking = find(state, booking_id, Some(player_id)).await?;
-    if booking.payment_status == "unpaid"
+    if booking.player_id == player_id
+        && booking.payment_status == "unpaid"
         && booking.status != "canceled"
         && booking.payment_mode == Some(PaymentMode::PayNow)
     {
         cancel_unpaid(state, &booking, Unpaid::LeftPaymentPage).await?;
     }
     lock.commit().await?;
-    view(state, refreshed(state, booking_id).await?).await
+    view(state, refreshed(state, booking_id).await?, player_id).await
 }
 
 /// Why an unpaid booking is canceled.
@@ -403,7 +472,17 @@ pub async fn record_in_bookeo(state: &AppState, payment_id: Uuid) -> AppResult<(
     };
     let booking = find(state, p.booking_id, None).await?;
     let provider_id = p.provider_payment_id.clone().unwrap_or_default();
-    let comment = format!("SkipCash payment {provider_id} ({})", p.merchant_txn_id);
+    let payer = match p.payer_id {
+        Some(id) => players::find_by_id(&state.db, id)
+            .await?
+            .map(|pl| pl.playername),
+        None => None,
+    };
+    let comment = format!(
+        "SkipCash payment {provider_id} ({}){}",
+        p.merchant_txn_id,
+        payer.map(|n| format!(", paid by @{n}")).unwrap_or_default()
+    );
 
     // A previous try may have reached Bookeo without us saving the result.
     let existing = state
@@ -463,14 +542,21 @@ fn payment_off() -> AppError {
 /// Shown in the app after a card attempt failed (SkipCash doesn't say why).
 const FAILED_ATTEMPT: &str = "The card payment didn't go through";
 
-/// Creates a SkipCash payment for the booking's price, in the player's name.
+/// Creates a SkipCash payment of `amount` (the whole rest if `None`) in the payer's name.
 async fn new_link(
     state: &AppState,
     skipcash: &SkipCashClient,
     booking: &PayableBooking,
+    payer_id: Uuid,
+    amount: Option<&str>,
 ) -> AppResult<Payment> {
-    let (amount, currency) = payable_amount(booking).ok_or_else(payment_off)?;
-    let player = players::find_by_id(&state.db, booking.player_id)
+    let balance = Balance::of(booking).ok_or_else(payment_off)?;
+    let currency = balance.currency.clone();
+    let amount = match amount {
+        Some(a) => a.to_string(),
+        None => from_cents(balance.remaining()),
+    };
+    let player = players::find_by_id(&state.db, payer_id)
         .await?
         .ok_or_else(|| AppError::NotFound("Player not found".into()))?;
     // SkipCash requires an email (sign-up asks for one; accounts staff created may lack it).
@@ -479,7 +565,7 @@ async fn new_link(
             "Online payment needs an email address on your account. Ask our staff to add one, or pay at the venue.".into(),
         ));
     }
-    let row = repository::insert(&state.db, booking.id, &amount, &currency).await?;
+    let row = repository::insert(&state.db, booking.id, payer_id, &amount, &currency).await?;
 
     // SkipCash wants a first and a last name.
     let mut names = player.full_name.split_whitespace();
@@ -577,27 +663,29 @@ async fn settle(
             "skipcash charged a different amount"
         );
     }
-    let newly_paid = match repository::mark_paid(&state.db, p, visa_id).await {
-        Ok(changed) => changed,
-        Err(sqlx::Error::Database(e)) if e.is_unique_violation() => {
-            // Another payment of this booking was paid first.
-            tracing::error!(
-                booking_id = %p.booking_id,
-                skipcash_id = ?p.provider_payment_id,
-                "booking paid twice; refund this payment from the SkipCash merchant portal"
-            );
-            repository::touch(&state.db, p.id, Some("Paid twice: refund needed")).await?;
-            repository::close(&state.db, p.id).await?;
-            return Ok(());
-        }
-        Err(e) => return Err(e.into()),
-    };
-    if !newly_paid {
+    if !repository::mark_paid(&state.db, p, visa_id).await? {
         return Ok(());
     }
     let booking_id = p.booking_id;
-    tracing::info!(%booking_id, skipcash_id = ?p.provider_payment_id, "booking paid");
     let booking = find(state, booking_id, None).await?;
+    tracing::info!(
+        %booking_id,
+        skipcash_id = ?p.provider_payment_id,
+        amount = %p.amount,
+        total_paid = %booking.amount_paid,
+        status = %booking.payment_status,
+        "payment received"
+    );
+    // Two players paying the rest at the same time can pay more than the price.
+    if let Some(b) = Balance::of(&booking)
+        && b.paid > b.total
+    {
+        tracing::error!(
+            %booking_id,
+            overpaid = %from_cents(b.paid - b.total),
+            "booking overpaid; refund the difference from the SkipCash merchant portal"
+        );
+    }
     if booking.status == "canceled" {
         tracing::error!(
             %booking_id,
@@ -619,8 +707,10 @@ async fn after_payment(state: &AppState, booking: &PayableBooking, p: &Payment) 
             tracing::warn!(%payment_id, "could not record payment in bookeo yet: {e}");
         }
     });
-    notify(state, booking, |to, name| {
-        emails::payment_received(state, to, name, booking, p)
+    let payer = p.payer_id.unwrap_or(booking.player_id);
+    let remaining = Balance::of(booking).map(|b| (from_cents(b.remaining()), b.currency));
+    notify_player(state, payer, |to, name| {
+        emails::payment_received(state, to, name, booking, p, remaining.clone())
     })
     .await;
 }
@@ -631,7 +721,15 @@ async fn notify(
     booking: &PayableBooking,
     build: impl FnOnce(&str, &str) -> crate::integrations::email::Email,
 ) {
-    let player_id = booking.player_id;
+    notify_player(state, booking.player_id, build).await
+}
+
+/// Emails a player, if they have an email address.
+async fn notify_player(
+    state: &AppState,
+    player_id: Uuid,
+    build: impl FnOnce(&str, &str) -> crate::integrations::email::Email,
+) {
     match players::find_by_id(&state.db, player_id).await {
         Ok(Some(player)) => {
             if let Some(email) = &player.email {
@@ -641,6 +739,72 @@ async fn notify(
         Ok(None) => {}
         Err(e) => tracing::error!(%player_id, "could not load player for email: {e}"),
     }
+}
+
+/// A booking's price and what's been paid, in cents.
+struct Balance {
+    total: i64,
+    paid: i64,
+    currency: String,
+}
+
+impl Balance {
+    /// `None` if the booking has nothing to pay online.
+    fn of(b: &PayableBooking) -> Option<Self> {
+        let (amount, currency) = payable_amount(b)?;
+        Some(Self {
+            total: cents(&amount)?,
+            paid: cents(&b.amount_paid).unwrap_or(0),
+            currency,
+        })
+    }
+
+    fn remaining(&self) -> i64 {
+        (self.total - self.paid).max(0)
+    }
+
+    /// QAR 120, or the rest if less is left.
+    fn min_payment(&self) -> i64 {
+        MIN_PAYMENT_CENTS.min(self.remaining())
+    }
+
+    /// The amount to pay next (the rest if `None`), checked against the limits.
+    fn check_payment(&self, amount: Option<&str>) -> AppResult<String> {
+        let (min, max) = (self.min_payment(), self.remaining());
+        let wanted = match amount {
+            None => max,
+            Some(a) => cents(a)
+                .ok_or_else(|| AppError::BadRequest("Enter an amount like 150 or 150.50".into()))?,
+        };
+        if !(min..=max).contains(&wanted) {
+            let c = &self.currency;
+            return Err(AppError::BadRequest(if min == max {
+                format!("Please pay the remaining {c} {}", from_cents(max))
+            } else {
+                format!(
+                    "Pay between {c} {} and {c} {}",
+                    from_cents(min),
+                    from_cents(max)
+                )
+            }));
+        }
+        Ok(from_cents(wanted))
+    }
+}
+
+/// "150" / "150.5" / "150.50" → 15050.
+fn cents(amount: &str) -> Option<i64> {
+    let normalized = normalize_amount(amount)?;
+    let (int, frac) = normalized.split_once('.')?;
+    int.parse::<i64>()
+        .ok()?
+        .checked_mul(100)?
+        .checked_add(frac.parse().ok()?)
+}
+
+/// 15050 → "150.50".
+fn from_cents(c: i64) -> String {
+    format!("{}.{:02}", c / 100, c % 100)
 }
 
 /// The amount to charge online, or `None` if there's nothing to pay.
@@ -676,6 +840,51 @@ pub fn normalize_amount(s: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn balance(total: &str, paid: &str) -> Balance {
+        Balance {
+            total: cents(total).unwrap(),
+            paid: cents(paid).unwrap(),
+            currency: "QAR".into(),
+        }
+    }
+
+    #[test]
+    fn converts_cents() {
+        assert_eq!(cents("150"), Some(15_000));
+        assert_eq!(cents("150.5"), Some(15_050));
+        assert_eq!(cents("0.07"), Some(7));
+        assert_eq!(cents("1.234"), None);
+        assert_eq!(cents("-5"), None);
+        assert_eq!(from_cents(15_050), "150.50");
+        assert_eq!(from_cents(7), "0.07");
+    }
+
+    #[test]
+    fn partial_payments_are_between_120_and_the_rest() {
+        let b = balance("400", "0");
+        assert_eq!(
+            b.check_payment(None).unwrap(),
+            "400.00",
+            "default: the whole rest"
+        );
+        assert_eq!(b.check_payment(Some("120")).unwrap(), "120.00");
+        assert_eq!(b.check_payment(Some("250.5")).unwrap(), "250.50");
+        let err = b.check_payment(Some("119.99")).unwrap_err().to_string();
+        assert!(err.contains("between QAR 120.00 and QAR 400.00"), "{err}");
+        assert!(b.check_payment(Some("400.01")).is_err());
+        assert!(b.check_payment(Some("abc")).is_err());
+
+        // After 300 paid, 100 is left: less than 120, so exactly the rest.
+        let b = balance("400", "300");
+        assert_eq!((b.remaining(), b.min_payment()), (10_000, 10_000));
+        assert_eq!(b.check_payment(Some("100")).unwrap(), "100.00");
+        let err = b.check_payment(Some("50")).unwrap_err().to_string();
+        assert!(err.contains("remaining QAR 100.00"), "{err}");
+
+        // Overpaid never goes negative.
+        assert_eq!(balance("400", "450").remaining(), 0);
+    }
 
     #[test]
     fn normalizes_amounts() {

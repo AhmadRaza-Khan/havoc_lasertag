@@ -9,7 +9,7 @@ use sqlx::types::Json;
 /// Every query aliases `bookings` as `b` so the same column list works with joins.
 const COLUMNS: &str = "b.id, b.player_id, b.bookeo_booking_number, b.product_id, b.product_name, \
     b.event_id, b.start_time, b.end_time, b.num_people, b.other_players, b.status, b.price_amount, b.price_currency, b.options, \
-    b.payment_status, b.payment_due_at, b.created_at, b.updated_at";
+    b.payment_status, b.amount_paid::text AS amount_paid, b.payment_due_at, b.created_at, b.updated_at";
 
 const PLAYER_COLUMNS: &str = "p.full_name AS player_full_name, p.playername AS player_playername";
 
@@ -80,7 +80,11 @@ pub async fn list_for_player(
     limit: i64,
     offset: i64,
 ) -> sqlx::Result<(Vec<BookingRow>, i64)> {
-    let filter = format!("b.player_id = $1 AND {}", when_filter("$2"));
+    // Their own bookings and the ones other players added them to.
+    let filter = format!(
+        "(b.player_id = $1 OR $1 = ANY(b.other_players)) AND {}",
+        when_filter("$2")
+    );
 
     let items = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {COLUMNS} FROM bookings b WHERE {filter} {} LIMIT $3 OFFSET $4",
@@ -163,7 +167,8 @@ pub async fn find(
     player_id: Option<Uuid>,
 ) -> sqlx::Result<Option<BookingRow>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "SELECT {COLUMNS} FROM bookings b WHERE b.id = $1 AND ($2::uuid IS NULL OR b.player_id = $2)"
+        "SELECT {COLUMNS} FROM bookings b
+         WHERE b.id = $1 AND ($2::uuid IS NULL OR b.player_id = $2 OR $2 = ANY(b.other_players))"
     )))
     .bind(id)
     .bind(player_id)
@@ -229,6 +234,13 @@ pub async fn apply_changes(
              price_currency = COALESCE($8, b.price_currency),
              other_players = COALESCE($9, b.other_players),
              options = COALESCE($10, b.options),
+             -- A new price can turn a paid booking partly paid (or the other way round).
+             payment_status = CASE
+                 WHEN b.payment_status IN ('partially_paid', 'paid')
+                      AND COALESCE($7, b.price_amount) IS NOT NULL
+                 THEN CASE WHEN b.amount_paid >= COALESCE($7, b.price_amount)::numeric
+                           THEN 'paid' ELSE 'partially_paid' END
+                 ELSE b.payment_status END,
              updated_at = now()
          WHERE b.id = $1
          RETURNING {COLUMNS}"

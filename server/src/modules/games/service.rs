@@ -7,6 +7,7 @@ use super::{
 use crate::{
     error::{AppError, AppResult},
     integrations::bookeo::Product,
+    modules::addons,
     state::AppState,
 };
 
@@ -26,6 +27,10 @@ pub async fn list(state: &AppState) -> AppResult<Vec<Game>> {
         .map(Game::from)
         .collect();
     games.sort_by(|a, b| a.name.cmp(&b.name));
+    let pictures = addons::image_urls(&state.db).await?;
+    for o in games.iter_mut().flat_map(|g| g.options.iter_mut()) {
+        o.image_url = pictures.get(addons::addon_key(&o.id)).cloned();
+    }
     Ok(games)
 }
 
