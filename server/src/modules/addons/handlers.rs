@@ -5,6 +5,8 @@ use axum::{
     http::{HeaderValue, Response, header},
 };
 
+use serde::Deserialize;
+
 use super::service::{self, Addon};
 use crate::{
     error::{AppError, AppResult},
@@ -43,6 +45,27 @@ pub async fn remove_image(
     Path(key): Path<String>,
 ) -> AppResult<Json<Vec<Addon>>> {
     Ok(Json(service::remove_image(&state, &key).await?))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PriceInput {
+    /// e.g. "50" or "49.50".
+    pub amount: String,
+}
+
+pub async fn set_price(
+    State(state): State<AppState>,
+    Path(key): Path<String>,
+    Json(input): Json<PriceInput>,
+) -> AppResult<Json<Vec<Addon>>> {
+    Ok(Json(service::set_price(&state, &key, &input.amount).await?))
+}
+
+pub async fn remove_price(
+    State(state): State<AppState>,
+    Path(key): Path<String>,
+) -> AppResult<Json<Vec<Addon>>> {
+    Ok(Json(service::remove_price(&state, &key).await?))
 }
 
 /// The picture (public). The URL carries a version (`?v=`), so it's cached for a year.

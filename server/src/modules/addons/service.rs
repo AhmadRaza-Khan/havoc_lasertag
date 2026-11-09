@@ -6,7 +6,7 @@ use sqlx::PgPool;
 
 use crate::{
     error::{AppError, AppResult},
-    modules::games::dto::game_options,
+    modules::{games::dto::game_options, payments::normalize_amount},
     shared::image::sniff,
     state::AppState,
 };
@@ -34,12 +34,15 @@ pub struct Addon {
     pub games: Vec<String>,
     pub image_url: Option<String>,
     pub image_updated_at: Option<DateTime<Utc>>,
+    /// Set by admins, e.g. "50.00". For reference: Bookeo calculates what a booking costs.
+    pub price: Option<String>,
 }
 
 /// Every add-on Bookeo offers on any game, in display order, with its picture.
 pub async fn list(state: &AppState) -> AppResult<Vec<Addon>> {
     let products = state.bookeo.products().await?;
     let images = stored(&state.db).await?;
+    let prices = prices(&state.db).await?;
     let mut out: Vec<Addon> = Vec::new();
     for p in products.iter() {
         for o in game_options(p) {
@@ -54,6 +57,7 @@ pub async fn list(state: &AppState) -> AppResult<Vec<Addon>> {
                 None => {
                     let updated = images.get(&key).copied();
                     out.push(Addon {
+                        price: prices.get(&key).cloned(),
                         image_url: updated.map(|t| url(&key, t)),
                         image_updated_at: updated,
                         key,
@@ -113,6 +117,46 @@ pub async fn remove_image(state: &AppState, key: &str) -> AppResult<Vec<Addon>> 
     list(state).await
 }
 
+/// Add-on prices by add-on key, for the add-ons that have one.
+pub async fn prices(db: &PgPool) -> AppResult<HashMap<String, String>> {
+    let rows: Vec<(String, String)> =
+        sqlx::query_as("SELECT addon_key, amount::text FROM addon_prices")
+            .fetch_all(db)
+            .await?;
+    Ok(rows.into_iter().collect())
+}
+
+pub async fn set_price(state: &AppState, key: &str, amount: &str) -> AppResult<Vec<Addon>> {
+    let amount = parse_price(amount)?;
+    ensure_exists(state, key).await?;
+    sqlx::query(
+        "INSERT INTO addon_prices (addon_key, amount) VALUES ($1, $2::numeric)
+         ON CONFLICT (addon_key) DO UPDATE SET amount = $2::numeric, updated_at = now()",
+    )
+    .bind(key)
+    .bind(&amount)
+    .execute(&state.db)
+    .await?;
+    tracing::info!(addon = key, %amount, "add-on price updated");
+    list(state).await
+}
+
+pub async fn remove_price(state: &AppState, key: &str) -> AppResult<Vec<Addon>> {
+    sqlx::query("DELETE FROM addon_prices WHERE addon_key = $1")
+        .bind(key)
+        .execute(&state.db)
+        .await?;
+    tracing::info!(addon = key, "add-on price removed");
+    list(state).await
+}
+
+/// "50" / "49.5" → "50.00" / "49.50"; at most 2 decimals and what the column can hold.
+fn parse_price(amount: &str) -> AppResult<String> {
+    normalize_amount(amount)
+        .filter(|a| a.len() <= 12)
+        .ok_or_else(|| AppError::BadRequest("Enter a price like 50 or 49.50".into()))
+}
+
 pub async fn image(db: &PgPool, key: &str) -> AppResult<(String, Vec<u8>)> {
     sqlx::query_as("SELECT content_type, data FROM addon_images WHERE addon_key = $1")
         .bind(key)
@@ -154,6 +198,16 @@ fn url(key: &str, updated_at: DateTime<Utc>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_prices() {
+        assert_eq!(parse_price(" 50 ").unwrap(), "50.00");
+        assert_eq!(parse_price("49.5").unwrap(), "49.50");
+        assert_eq!(parse_price("0").unwrap(), "0.00");
+        for bad in ["", "abc", "-5", "1.234", "123456789012"] {
+            assert!(parse_price(bad).is_err(), "{bad}");
+        }
+    }
 
     #[test]
     fn keys_are_shared_across_games() {

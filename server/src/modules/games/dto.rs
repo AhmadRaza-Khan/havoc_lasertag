@@ -45,6 +45,9 @@ pub struct GameOption {
     pub default: Option<String>,
     /// The add-on's picture, if admins set one (Settings → Add-ons).
     pub image_url: Option<String>,
+    /// The price admins set, for display (Settings → Add-ons). Bookeo calculates the booking's
+    /// actual price.
+    pub price: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -69,6 +72,7 @@ pub fn game_options(p: &Product) -> Vec<GameOption> {
         max: None,
         default: None,
         image_url: None,
+        price: None,
     };
     let mut out: Vec<(i32, GameOption)> = Vec::new();
     for o in &p.choice_options {

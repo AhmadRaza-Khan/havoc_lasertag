@@ -1,4 +1,4 @@
-import { apiRequest } from "@/lib/api-client";
+import { apiRequest } from '@/lib/api-client'
 import type {
   Addon,
   PaymentSettings,
@@ -6,39 +6,45 @@ import type {
   SkipCashCredentials,
   SkipCashCredentialsInput,
   SkipCashTestResult,
-} from "./types";
+} from './types'
 
 export const settingsApi = {
-  payments: () => apiRequest<PaymentSettings>("/settings/payments"),
+  payments: () => apiRequest<PaymentSettings>('/settings/payments'),
   savePayments: (input: PaymentSettingsInput) =>
-    apiRequest<PaymentSettings>("/settings/payments", {
-      method: "PUT",
+    apiRequest<PaymentSettings>('/settings/payments', {
+      method: 'PUT',
       body: JSON.stringify(input),
     }),
-  skipcash: () => apiRequest<SkipCashCredentials>("/settings/skipcash"),
+  skipcash: () => apiRequest<SkipCashCredentials>('/settings/skipcash'),
   saveSkipcash: (input: SkipCashCredentialsInput) =>
-    apiRequest<SkipCashCredentials>("/settings/skipcash", {
-      method: "PUT",
+    apiRequest<SkipCashCredentials>('/settings/skipcash', {
+      method: 'PUT',
       body: JSON.stringify(input),
     }),
-  removeSkipcash: () =>
-    apiRequest<SkipCashCredentials>("/settings/skipcash", { method: "DELETE" }),
-  addons: () => apiRequest<Addon[]>("/settings/addons"),
+  removeSkipcash: () => apiRequest<SkipCashCredentials>('/settings/skipcash', { method: 'DELETE' }),
+  addons: () => apiRequest<Addon[]>('/settings/addons'),
   uploadAddonImage: (key: string, image: Blob) => {
-    const body = new FormData();
-    body.append("file", image, "addon.jpg");
-    return apiRequest<Addon[]>(
-      `/settings/addons/${encodeURIComponent(key)}/image`,
-      { method: "PUT", body },
-    );
+    const body = new FormData()
+    body.append('file', image, 'addon.jpg')
+    return apiRequest<Addon[]>(`/settings/addons/${encodeURIComponent(key)}/image`, {
+      method: 'PUT',
+      body,
+    })
   },
   removeAddonImage: (key: string) =>
     apiRequest<Addon[]>(`/settings/addons/${encodeURIComponent(key)}/image`, {
-      method: "DELETE",
+      method: 'DELETE',
     }),
+  setAddonPrice: (key: string, amount: string) =>
+    apiRequest<Addon[]>(`/settings/addons/${encodeURIComponent(key)}/price`, {
+      method: 'PUT',
+      body: JSON.stringify({ amount }),
+    }),
+  removeAddonPrice: (key: string) =>
+    apiRequest<Addon[]>(`/settings/addons/${encodeURIComponent(key)}/price`, { method: 'DELETE' }),
   testSkipcash: (input: SkipCashCredentialsInput) =>
-    apiRequest<SkipCashTestResult>("/settings/skipcash/test", {
-      method: "POST",
+    apiRequest<SkipCashTestResult>('/settings/skipcash/test', {
+      method: 'POST',
       body: JSON.stringify(input),
     }),
-};
+}

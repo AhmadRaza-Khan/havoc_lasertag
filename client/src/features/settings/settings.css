@@ -261,6 +261,26 @@
   gap: 8px;
 }
 
+.addon-price-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.addon-price-form label {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+}
+
+.addon-price-form input {
+  width: 96px;
+  padding: 5px 10px;
+}
+
 .addon-image-remove {
   color: var(--danger);
 }

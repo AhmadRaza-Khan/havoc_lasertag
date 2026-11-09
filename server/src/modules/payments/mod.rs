@@ -19,7 +19,7 @@ pub mod worker;
 pub use credentials::load as load_skipcash;
 pub use handlers::skipcash_webhook;
 pub use model::PaymentMode;
-pub use service::on_booking_created;
+pub use service::{normalize_amount, on_booking_created};
 
 use axum::{
     Router,

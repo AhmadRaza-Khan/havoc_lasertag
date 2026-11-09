@@ -31,6 +31,8 @@ export type GameOption = {
   default: string | null
   /** Picture set in Settings → Add-on pictures (API path; use `apiUrl`). */
   image_url: string | null
+  /** Set in Settings, e.g. "50.00". Shown for reference: Bookeo calculates the booking's price. */
+  price: string | null
 }
 
 export type Slot = {

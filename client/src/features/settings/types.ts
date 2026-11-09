@@ -53,4 +53,6 @@ export type Addon = {
   /** API path; use `apiUrl`. */
   image_url: string | null
   image_updated_at: string | null
+  /** Set in Settings, e.g. "50.00". Shown for reference: Bookeo calculates the booking's price. */
+  price: string | null
 }

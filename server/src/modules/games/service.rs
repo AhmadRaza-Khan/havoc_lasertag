@@ -28,8 +28,10 @@ pub async fn list(state: &AppState) -> AppResult<Vec<Game>> {
         .collect();
     games.sort_by(|a, b| a.name.cmp(&b.name));
     let pictures = addons::image_urls(&state.db).await?;
+    let prices = addons::prices(&state.db).await?;
     for o in games.iter_mut().flat_map(|g| g.options.iter_mut()) {
         o.image_url = pictures.get(addons::addon_key(&o.id)).cloned();
+        o.price = prices.get(addons::addon_key(&o.id)).cloned();
     }
     Ok(games)
 }

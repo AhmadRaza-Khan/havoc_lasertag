@@ -330,6 +330,12 @@
   gap: 8px;
 }
 
+.addon-price {
+  color: var(--accent);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
 .addon-description {
   margin: 0;
   white-space: pre-line;

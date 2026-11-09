@@ -155,9 +155,11 @@ player bookings notify staff. Customers get Bookeo's emails when they have an em
 | PUT | `/api/settings/skipcash` | admin | `{environment: sandbox\|production, client_id, key_id, key_secret, webhook_key}`; empty secrets keep the saved ones. Takes effect immediately |
 | DELETE | `/api/settings/skipcash` | admin | Removes the credentials: online payment off |
 | POST | `/api/settings/skipcash/test` | admin | Same body as PUT, not saved. Creates a 1.00 QAR test payment (checks key ID + secret) and reads it back (checks client ID) → `{ok, checks: [{name, ok, message}]}` |
-| GET | `/api/settings/addons` | admin | every add-on Bookeo offers (one row per add-on, whichever games offer it): `[{key, name, kind, description, staff_only, games, image_url}]`. `key` is the part of Bookeo's option id after the last `_`, the same on every game |
-| PUT | `/api/settings/addons/{key}/image` | admin | `multipart/form-data`, field `file` (JPEG/PNG/WebP, max 900 KB) → the add-ons list. One picture covers the add-on on every game. Add-on prices stay Bookeo's |
+| GET | `/api/settings/addons` | admin | every add-on Bookeo offers (one row per add-on, whichever games offer it): `[{key, name, kind, description, staff_only, games, image_url, price}]`. `key` is the part of Bookeo's option id after the last `_`, the same on every game |
+| PUT | `/api/settings/addons/{key}/image` | admin | `multipart/form-data`, field `file` (JPEG/PNG/WebP, max 900 KB) → the add-ons list. One picture covers the add-on on every game |
 | DELETE | `/api/settings/addons/{key}/image` | admin | removes the picture → the add-ons list |
+| PUT | `/api/settings/addons/{key}/price` | admin | `{amount}` (e.g. `"49.50"`) → the add-ons list. One price covers the add-on on every game. For display only: bookings are charged the total Bookeo calculates. Games' `options[].price` (admin and `/api/player/games`) carries it |
+| DELETE | `/api/settings/addons/{key}/price` | admin | removes the price → the add-ons list |
 | GET | `/api/addon-images/{key}?v=` | public | the picture (versioned URL, cached for a year). Games' `options[].image_url` points here |
 | GET | `/api/stats/leaderboard` | admin | general report: every player's all-time totals, ranked by points |
 | GET | `/api/stats/players/{id}` | admin | one player's all-time totals (the admin panel's player stats page) |
