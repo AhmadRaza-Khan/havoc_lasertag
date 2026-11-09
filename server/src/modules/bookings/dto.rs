@@ -226,6 +226,8 @@ pub struct BookingPrice {
 #[derive(Debug, Clone, Serialize)]
 pub struct PlayerSummary {
     pub id: Uuid,
+    /// Staff only: left out of the mobile app's responses.
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub full_name: String,
     pub playername: String,
 }

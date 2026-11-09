@@ -3,6 +3,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::model::{ChatMessage, ChatPlayer, ConversationRow};
+use crate::modules::players::HAVOC_ADMIN_ID;
 
 /// Selects a message with its recipient (the conversation member who isn't the sender).
 const MESSAGE_COLUMNS: &str = "m.id, m.conversation_id, m.sender_id,
@@ -14,7 +15,8 @@ fn ordered(a: Uuid, b: Uuid) -> (Uuid, Uuid) {
     if a < b { (a, b) } else { (b, a) }
 }
 
-/// Every player except `me`, by name. `pattern` is an escaped ILIKE pattern.
+/// Every player except `me`. `pattern` is an escaped ILIKE pattern. Real names are searched and
+/// sorted on only for staff (`me` = Havoc Admin): players find each other by playername.
 pub async fn list_players(
     db: &PgPool,
     me: Uuid,
@@ -22,13 +24,16 @@ pub async fn list_players(
     limit: i64,
     offset: i64,
 ) -> sqlx::Result<(Vec<ChatPlayer>, i64)> {
-    const FILTER: &str = "id <> $1 AND ($2::text IS NULL OR playername ILIKE $2 OR full_name ILIKE $2)
-        AND NOT EXISTS (SELECT 1 FROM player_blocks b WHERE b.blocker_id = $1 AND b.blocked_id = players.id)";
+    let staff = format!("$1 = '{HAVOC_ADMIN_ID}'::uuid");
+    let filter = format!(
+        "id <> $1 AND ($2::text IS NULL OR playername ILIKE $2 OR ({staff} AND full_name ILIKE $2))
+        AND NOT EXISTS (SELECT 1 FROM player_blocks b WHERE b.blocker_id = $1 AND b.blocked_id = players.id)"
+    );
 
     let items = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT id, full_name, playername, last_seen_at,
                 CASE WHEN avatar_updated_at IS NULL THEN NULL ELSE '/api/avatars/' || id || '?v=' || floor(extract(epoch FROM avatar_updated_at) * 1000)::bigint END AS avatar_url FROM players
-         WHERE {FILTER} ORDER BY full_name, playername LIMIT $3 OFFSET $4"
+         WHERE {filter} ORDER BY CASE WHEN {staff} THEN full_name END, playername LIMIT $3 OFFSET $4"
     )))
     .bind(me)
     .bind(pattern)
@@ -38,7 +43,7 @@ pub async fn list_players(
     .await?;
 
     let total = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-        "SELECT COUNT(*) FROM players WHERE {FILTER}"
+        "SELECT COUNT(*) FROM players WHERE {filter}"
     )))
     .bind(me)
     .bind(pattern)

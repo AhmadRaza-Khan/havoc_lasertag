@@ -107,7 +107,9 @@ pub async fn blocks(
     .bind(me.id)
     .fetch_all(&state.db)
     .await?;
-    Ok(Json(players))
+    Ok(Json(
+        players.into_iter().map(ChatPlayer::for_players).collect(),
+    ))
 }
 
 #[derive(Deserialize)]

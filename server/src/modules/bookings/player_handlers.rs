@@ -1,5 +1,7 @@
 //! Mobile app: a player's own bookings and the ones other players added them to.
 
+use std::collections::HashMap;
+
 use axum::{
     Json,
     extract::{Path, Query, State},
@@ -8,7 +10,7 @@ use axum::{
 use uuid::Uuid;
 
 use super::{
-    dto::{BookingResponse, CreateBookingRequest, ListQuery},
+    dto::{BookingResponse, CreateBookingRequest, ListQuery, PlayerSummary},
     model::BookingRow,
     service::{self, Actor},
 };
@@ -33,7 +35,7 @@ pub async fn list(
 ) -> AppResult<Json<Paginated<BookingResponse>>> {
     let page = service::list_for_player(&state, player.id, query).await?;
     let tz = state.config.bookeo.timezone;
-    let others = service::other_players_lookup(&state, &page.items).await?;
+    let others = players_without_names(service::other_players_lookup(&state, &page.items).await?);
     Ok(Json(page.map(|r| {
         let (ids, owner) = (r.other_players.clone(), r.player_id);
         BookingResponse::from_row(r, tz)
@@ -51,8 +53,16 @@ pub async fn get(
     Ok(Json(respond(&state, row).await?))
 }
 
+/// Players on a booking see each other by playername only.
+fn players_without_names(mut lookup: HashMap<Uuid, PlayerSummary>) -> HashMap<Uuid, PlayerSummary> {
+    for p in lookup.values_mut() {
+        p.full_name.clear();
+    }
+    lookup
+}
+
 async fn respond(state: &AppState, row: BookingRow) -> AppResult<BookingResponse> {
-    let others = service::other_players_lookup(state, [&row]).await?;
+    let others = players_without_names(service::other_players_lookup(state, [&row]).await?);
     let (ids, owner) = (row.other_players.clone(), row.player_id);
     Ok(BookingResponse::from_row(row, state.config.bookeo.timezone)
         .with_other_players(&ids, &others)

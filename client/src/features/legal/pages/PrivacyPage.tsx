@@ -63,6 +63,10 @@ export default function PrivacyPage() {
           not see your full name, email or phone number.
         </li>
         <li>
+          Players on the same booking can see the booking: the game, date, time, add-ons, each other's playernames, and
+          how much has been paid and how much is left.
+        </li>
+        <li>
           The public leaderboard on our website shows the top players' playernames and statistics.
         </li>
         <li>Chat messages are visible only to you and the player you're chatting with, and to our staff if a message is reported.</li>
@@ -70,7 +74,7 @@ export default function PrivacyPage() {
       </ul>
 
       <h2>Service providers we share information with</h2>
-      <p>We use trusted providers to run our services. They process information only to provide their service to us:</p>
+      <p>We use trusted providers to run our services. They process information only to provide their service to us, and must protect it to at least the same standard as this policy:</p>
       <ul>
         <li>
           <strong>Bookeo</strong> (booking system): your name, contact details and booking details.

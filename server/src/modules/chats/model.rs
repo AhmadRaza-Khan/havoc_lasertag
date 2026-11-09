@@ -7,6 +7,8 @@ use uuid::Uuid;
 #[derive(Debug, Serialize, FromRow)]
 pub struct ChatPlayer {
     pub id: Uuid,
+    /// Staff only: cleared by [`ChatPlayer::for_players`] for the mobile app.
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub full_name: String,
     pub playername: String,
     pub last_seen_at: Option<DateTime<Utc>>,
@@ -15,6 +17,14 @@ pub struct ChatPlayer {
     /// Filled in from the live connection hub, not the database.
     #[sqlx(skip)]
     pub online: bool,
+}
+
+impl ChatPlayer {
+    /// What another player may see: real names stay private.
+    pub fn for_players(mut self) -> Self {
+        self.full_name.clear();
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize, FromRow)]

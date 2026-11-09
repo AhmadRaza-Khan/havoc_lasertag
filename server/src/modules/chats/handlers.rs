@@ -24,7 +24,8 @@ pub async fn players(
     me: AuthPlayer,
     Query(query): Query<PlayersQuery>,
 ) -> AppResult<Json<Paginated<ChatPlayer>>> {
-    Ok(Json(service::list_players(&state, me.id, query).await?))
+    let page = service::list_players(&state, me.id, query).await?;
+    Ok(Json(page.map(ChatPlayer::for_players)))
 }
 
 pub async fn player(
@@ -32,14 +33,18 @@ pub async fn player(
     _me: AuthPlayer,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<ChatPlayer>> {
-    Ok(Json(service::get_player(&state, id).await?))
+    Ok(Json(service::get_player(&state, id).await?.for_players()))
 }
 
 pub async fn conversations(
     State(state): State<AppState>,
     me: AuthPlayer,
 ) -> AppResult<Json<Vec<Conversation>>> {
-    Ok(Json(service::list_conversations(&state, me.id).await?))
+    let mut conversations = service::list_conversations(&state, me.id).await?;
+    for c in &mut conversations {
+        c.player.full_name.clear();
+    }
+    Ok(Json(conversations))
 }
 
 pub async fn messages(

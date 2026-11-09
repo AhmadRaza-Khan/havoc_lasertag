@@ -6,5 +6,5 @@ export const BUSINESS = {
   phoneHref: 'tel:+97471323300',
   website: 'https://www.havoc-tlt.com',
   /** Last change to the privacy policy and terms. */
-  effective: '22 October 2026',
+  effective: '9 November 2026',
 }
