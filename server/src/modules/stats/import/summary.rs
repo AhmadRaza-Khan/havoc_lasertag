@@ -49,7 +49,7 @@ pub fn parse(text: &str) -> Result<GameSummary, ImportError> {
     let upper = text.to_uppercase();
     if !upper.contains("STATISTIC OF THE GAME") {
         return Err(ImportError::new(
-            "Page 1 is not a game statistics summary (\"STATISTIC OF THE GAME\" not found)",
+            "This isn't the game's total statistics report. Upload the \"Total_statistic\" report (Total_statistic_HH:MM.pdf), not the \"Game_statistic\" one.",
         ));
     }
 

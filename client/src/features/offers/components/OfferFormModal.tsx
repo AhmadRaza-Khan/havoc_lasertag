@@ -31,7 +31,7 @@ function initialValues(offer: Offer | null): FormValues {
   return {
     title: offer?.title ?? '',
     description: offer?.description ?? '',
-    is_active: offer?.is_active ?? true,
+    is_active: offer?.is_active ?? false,
     starts_on: offer?.starts_on ?? '',
     ends_on: offer?.ends_on ?? '',
   }

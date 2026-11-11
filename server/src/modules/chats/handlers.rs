@@ -42,7 +42,7 @@ pub async fn conversations(
 ) -> AppResult<Json<Vec<Conversation>>> {
     let mut conversations = service::list_conversations(&state, me.id).await?;
     for c in &mut conversations {
-        c.player.full_name.clear();
+        c.player.hide_private();
     }
     Ok(Json(conversations))
 }

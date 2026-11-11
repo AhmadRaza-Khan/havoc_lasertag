@@ -75,6 +75,8 @@ pub async fn signup(db: &PgPool, input: SignupInput) -> AppResult<Player> {
     };
     required("Email", &input.email)?;
     required("Phone number", &input.phone)?;
+    // Staff-like names can't be taken from the app (staff can still create any name).
+    check_playername(db, &input.playername).await?;
     create(
         db,
         PlayerInput {
@@ -89,9 +91,28 @@ pub async fn signup(db: &PgPool, input: SignupInput) -> AppResult<Player> {
 }
 
 /// Whether a playername can be taken: `Err` with the reason if it's invalid or in use.
+/// Names a player could use to pass as staff (\"admin\", \"havoc-support\", \"h.a.v.o.c\").
+fn looks_like_staff(playername: &str) -> bool {
+    let bare: String = playername
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect();
+    bare.contains("admin")
+        || bare.starts_with("havoc")
+        || ["staff", "support", "moderator", "official", "system"]
+            .iter()
+            .any(|w| bare == *w || bare.starts_with(w))
+}
+
+/// For the app's sign-up form and sign-up: valid, not reserved for staff, and free.
 pub async fn check_playername(db: &PgPool, raw: &str) -> AppResult<String> {
     let playername = normalize_handle(raw);
     validate_handle("Playername", &playername)?;
+    if looks_like_staff(&playername) {
+        return Err(AppError::BadRequest(
+            "This playername is reserved. Please choose another one.".into(),
+        ));
+    }
     if repository::find_credentials(db, &playername)
         .await?
         .is_some()
@@ -145,6 +166,25 @@ fn map_unique_violation(e: sqlx::Error) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn staff_like_names_are_reserved() {
+        for name in [
+            "admin",
+            "havoc",
+            "havoc_staff",
+            "h.a.v.o.c",
+            "the-admin1",
+            "support",
+            "staff2",
+            "system",
+        ] {
+            assert!(looks_like_staff(name), "{name}");
+        }
+        for name in ["laith123", "gin", "testplayer", "bella"] {
+            assert!(!looks_like_staff(name), "{name}");
+        }
+    }
 
     #[test]
     fn phone_searches_match_digits_only() {

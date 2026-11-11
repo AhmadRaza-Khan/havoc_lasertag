@@ -39,12 +39,23 @@ export function StatsUpload() {
 
   const busy = upload.isPending || current.data?.status === 'processing'
   const history = (recent.data ?? []).filter((i) => i.id !== importId).slice(0, 5)
+  const lastImport = (recent.data ?? []).find((i) => i.status === 'completed')
 
   return (
     <section className="panel panel-padded stats-upload">
       <div className="stats-upload-head">
         <div>
           <h2>Upload game stats report</h2>
+          <p className="muted small">
+            Use the <strong>Total_statistic</strong> report (Total_statistic_HH:MM.pdf), not Game_statistic.
+          </p>
+          <p className="muted small">
+            {lastImport
+              ? `Last import: ${formatDay(lastImport.finished_at ?? lastImport.created_at)}${
+                  lastImport.game ? ` (game of ${formatDay(lastImport.game.started_at)})` : ''
+                }`
+              : 'No completed imports yet.'}
+          </p>
         </div>
       </div>
 

@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import type { FormEvent, ReactNode } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { useEffect, useState } from 'react'
+import type { FormEvent, MouseEvent, ReactNode } from 'react'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { ArrowLeft, Info } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { useGames, useSlots } from '@/features/games'
@@ -30,6 +30,7 @@ import '../bookings.css'
 export default function BookingFormPage() {
   const { id } = useParams()
   const booking = useBooking(id)
+  const back = useBackTo()
 
   const header = (
     <PageHeader
@@ -40,7 +41,7 @@ export default function BookingFormPage() {
           : 'Book a slot for a player. The booking is created in Bookeo.'
       }
       actions={
-        <Link to="/bookings" className="btn btn-secondary">
+        <Link to={back} className="btn btn-secondary" onClick={confirmLeave}>
           <ArrowLeft size={16} aria-hidden="true" />
           Back to bookings
         </Link>
@@ -60,9 +61,23 @@ export default function BookingFormPage() {
   )
 }
 
+/** Where "Back" goes: the bookings list with the tab and filters it was opened from. */
+function useBackTo(): string {
+  const state = useLocation().state as { back?: string } | null
+  return state?.back?.startsWith('/bookings') ? state.back : '/bookings'
+}
+
+/** Set while the form has unsaved changes (read by the Back link and the browser's leave prompt). */
+let unsavedChanges = false
+
+function confirmLeave(e: MouseEvent) {
+  if (unsavedChanges && !window.confirm('Discard your changes to this booking?')) e.preventDefault()
+}
+
 function BookingForm({ booking }: { booking: Booking | null }) {
   const isEdit = booking !== null
   const navigate = useNavigate()
+  const back = useBackTo()
   const today = businessDate()
   const initialFrom = booking ? maxDate(today, businessDate(booking.start_time)) : today
 
@@ -117,6 +132,25 @@ function BookingForm({ booking }: { booking: Booking | null }) {
   // The chosen day's slots.
   const slots = useSlots(date ? productId : null, date, date)
 
+  // Anything changed from how the form started?
+  const dirty =
+    Object.keys(addOnEdits).length > 0 ||
+    slot?.event_id !== (booking?.event_id ?? undefined) ||
+    numPeople !== String(booking?.num_people ?? '') ||
+    others.map((o) => o.id).join() !== (booking?.other_players ?? []).map((o) => o.id).join() ||
+    (!booking && (player !== null || productId !== null))
+  useEffect(() => {
+    unsavedChanges = dirty
+    const warn = (e: BeforeUnloadEvent) => {
+      if (unsavedChanges) e.preventDefault()
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => {
+      unsavedChanges = false
+      window.removeEventListener('beforeunload', warn)
+    }
+  }, [dirty])
+
   const create = useCreateBooking()
   const update = useUpdateBooking()
   const mutation = isEdit ? update : create
@@ -161,8 +195,10 @@ function BookingForm({ booking }: { booking: Booking | null }) {
           },
         },
         {
-          onSuccess: (b) =>
-            navigate('/bookings', { state: { flash: `Booking #${b.booking_number} updated.` } }),
+          onSuccess: (b) => {
+            unsavedChanges = false
+            navigate(back, { state: { flash: `Booking #${b.booking_number} updated.` } })
+          },
         },
       )
     } else {
@@ -176,14 +212,16 @@ function BookingForm({ booking }: { booking: Booking | null }) {
           options: toOptionInputs(gameOptions, addOnValues),
         },
         {
-          onSuccess: (b) =>
+          onSuccess: (b) => {
+            unsavedChanges = false
             navigate('/bookings', {
               state: {
                 flash: `Booking #${b.booking_number} created for ${b.player.full_name}${
                   b.status === 'pending' ? ' (pending staff approval in Bookeo)' : ''
                 }.`,
               },
-            }),
+            })
+          },
         },
       )
     }
@@ -399,7 +437,16 @@ function BookingForm({ booking }: { booking: Booking | null }) {
               </dd>
             </>
           )}
-          <dt>Estimated price</dt>
+          {booking?.price && (
+            <>
+              <dt>Current total</dt>
+              <dd>
+                {formatMoney(booking.price.amount, booking.price.currency)}
+                <span className="muted small summary-addon">calculated by Bookeo, add-ons included</span>
+              </dd>
+            </>
+          )}
+          <dt>{booking?.price ? 'New estimate' : 'Estimated price'}</dt>
           <dd>
             {estimate(game, people, peopleError) ?? <span className="muted">—</span>}
             {chosenAddOns.length > 0 && <span className="muted small summary-addon">+ add-ons</span>}

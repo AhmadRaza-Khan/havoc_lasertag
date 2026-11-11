@@ -26,7 +26,7 @@ pub fn read(bytes: &[u8]) -> Result<PdfContent, ImportError> {
     let pages = doc.get_pages();
     if pages.len() < 2 {
         return Err(ImportError::new(
-            "The PDF has no player pages (expected a summary page plus one page per player)",
+            "The PDF has no player pages. Upload the \"Total_statistic\" report (Total_statistic_HH:MM.pdf), not the \"Game_statistic\" one.",
         ));
     }
     if pages.len() > MAX_PAGES {

@@ -398,6 +398,19 @@ select:focus {
   text-align: right;
 }
 
+/* Wide tables scroll sideways; the actions stay in view at the right edge. */
+.table th.table-actions,
+.table td.table-actions {
+  position: sticky;
+  right: 0;
+  background: var(--card);
+  box-shadow: -8px 0 8px -8px rgba(0, 0, 0, 0.15);
+}
+
+.table tbody tr:hover td.table-actions {
+  background: var(--row-hover);
+}
+
 /* Pagination */
 
 .pagination {

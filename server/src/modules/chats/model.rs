@@ -19,11 +19,21 @@ pub struct ChatPlayer {
     pub online: bool,
 }
 
+/// How the staff chat account is shown to players (its playername is \"admin\").
+pub const STAFF_DISPLAY_NAME: &str = "Havoc Admin";
+
 impl ChatPlayer {
-    /// What another player may see: real names stay private.
+    /// What another player may see: real names stay private, and staff show as \"Havoc Admin\".
     pub fn for_players(mut self) -> Self {
-        self.full_name.clear();
+        self.hide_private();
         self
+    }
+
+    pub fn hide_private(&mut self) {
+        self.full_name.clear();
+        if self.id == crate::modules::players::HAVOC_ADMIN_ID {
+            self.playername = STAFF_DISPLAY_NAME.into();
+        }
     }
 }
 

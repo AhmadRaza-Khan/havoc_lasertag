@@ -128,7 +128,9 @@ pub async fn list_all(
               OR b.bookeo_booking_number ILIKE $1)
          AND ($2::uuid IS NULL OR b.player_id = $2)
          AND {}
-         AND ($4::text IS NULL OR b.status = $4)",
+         AND ($4::text IS NULL OR b.status = $4)
+         -- \"Upcoming\" means still on: canceled ones only when asked for by status.
+         AND ($3::text IS DISTINCT FROM 'upcoming' OR $4::text IS NOT NULL OR b.status <> 'canceled')",
         when_filter("$3")
     );
 

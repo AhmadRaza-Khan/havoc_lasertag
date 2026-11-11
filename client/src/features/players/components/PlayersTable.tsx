@@ -1,4 +1,5 @@
-import { Pencil, Trash2 } from 'lucide-react'
+import { BarChart3, Pencil, Trash2 } from 'lucide-react'
+import { Link } from 'react-router'
 import { formatDate } from '@/lib/format'
 import type { Player } from '../types'
 
@@ -36,6 +37,9 @@ export function PlayersTable({ players, onEdit, onDelete }: PlayersTableProps) {
               <td>{p.email ?? <span className="muted">—</span>}</td>
               <td>{formatDate(p.created_at)}</td>
               <td className="table-actions">
+                <Link to={`/players/${p.id}/stats`} className="icon-btn" aria-label={`Stats of ${p.playername}`} title="Stats">
+                  <BarChart3 size={16} />
+                </Link>
                 <button
                   type="button"
                   className="icon-btn"

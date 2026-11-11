@@ -168,6 +168,11 @@ pub async fn update(
             "Canceled bookings can't be changed".into(),
         ));
     }
+    if row.end_time <= chrono::Utc::now() {
+        return Err(AppError::Conflict(
+            "This booking has already been played and can't be changed".into(),
+        ));
+    }
 
     match &req.other_player_ids {
         Some(others) => check_other_players(state, row.player_id, others).await?,
@@ -232,6 +237,11 @@ pub async fn cancel(state: &AppState, id: Uuid, actor: Actor) -> AppResult<Booki
     let row = find(state, id, None).await?;
     if row.status == "canceled" {
         return Err(AppError::Conflict("Booking is already canceled".into()));
+    }
+    if row.end_time <= chrono::Utc::now() {
+        return Err(AppError::Conflict(
+            "This booking has already been played and can't be canceled".into(),
+        ));
     }
     let has_email = players::find_by_id(&state.db, row.player_id)
         .await?

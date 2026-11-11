@@ -1,6 +1,7 @@
 .admin-layout {
   display: grid;
-  grid-template-columns: 240px 1fr;
+  /* minmax(0, …): a wide table scrolls inside its box instead of widening the page. */
+  grid-template-columns: 240px minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -124,7 +125,7 @@
 
 @media (max-width: 768px) {
   .admin-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto 1fr;
   }
 
@@ -146,7 +147,8 @@
     order: 3;
     flex-basis: 100%;
     flex-direction: row;
-    overflow-x: auto;
+    /* Every page stays visible: the items wrap onto a second row instead of scrolling off. */
+    flex-wrap: wrap;
   }
 
   .sidebar-footer {

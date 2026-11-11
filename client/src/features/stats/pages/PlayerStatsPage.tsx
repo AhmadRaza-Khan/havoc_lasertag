@@ -16,7 +16,7 @@ type Bar = {
   value: string
   /** 0..1 */
   fill: number
-  /** What a full bar means, e.g. "Top 30 best 346". */
+  /** What a full bar means, e.g. "Top 30 highest 346". */
   scale: string
 }
 
@@ -114,7 +114,7 @@ function bars(s: Standing, board: Standing[]): Bar[] {
     show: (v: number) => string = String,
   ): Bar => {
     const max = best(pick)
-    return { label, icon, value: show(pick(s)), fill: ratio(pick(s), max), scale: `Top 30 best ${show(max)}` }
+    return { label, icon, value: show(pick(s)), fill: ratio(pick(s), max), scale: `Top 30 highest ${show(max)}` }
   }
   const ranked = board.filter((x) => x.position !== null).length || 1
 

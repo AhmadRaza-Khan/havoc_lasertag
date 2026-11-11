@@ -105,7 +105,12 @@ pub async fn send_message(
     if !state.chat.is_online(to)
         && let Some(sender) = repository::find_player(&state.db, from).await?
     {
-        crate::modules::push::notify_chat_message(state, to, from, &sender.playername, &body);
+        let title = if from == crate::modules::players::HAVOC_ADMIN_ID {
+            super::model::STAFF_DISPLAY_NAME
+        } else {
+            sender.playername.as_str()
+        };
+        crate::modules::push::notify_chat_message(state, to, from, title, &body);
     }
 
     state.chat.send(

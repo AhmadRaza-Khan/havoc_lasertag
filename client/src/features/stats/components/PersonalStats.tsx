@@ -15,7 +15,8 @@ export function PersonalStats({ details: d }: { details: PlayerDetails }) {
       label: 'Efficiency KDR',
       icon: statIcons.efficiency,
       value: d.efficiency_kdr === null ? '—' : d.efficiency_kdr.toFixed(2),
-      caption: 'Average per game',
+      // Differs from the all-time Efficiency above (total kills ÷ total KIA).
+      caption: 'Average of each game’s KDR',
     },
     { label: 'Max combo', icon: statIcons.maxCombo, value: n(d.max_combo), caption: 'Best in one game' },
     {

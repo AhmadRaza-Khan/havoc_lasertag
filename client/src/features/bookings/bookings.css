@@ -1,7 +1,8 @@
 .game-cell {
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: 220px;
+  /* Long game names wrap instead of widening the table. */
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* Booking form: steps on the left, sticky summary on the right */

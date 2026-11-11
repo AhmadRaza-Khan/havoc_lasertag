@@ -1,4 +1,5 @@
-import { Link } from 'react-router'
+import { useState } from 'react'
+import { Link, useLocation } from 'react-router'
 import { Ban, Pencil } from 'lucide-react'
 import { formatDay, formatMoney, formatTimeRange } from '@/lib/format'
 import type { Booking } from '../types'
@@ -10,6 +11,10 @@ type BookingsTableProps = {
 }
 
 export function BookingsTable({ bookings, onCancel }: BookingsTableProps) {
+  // The edit page returns to this list with the same tab and filters.
+  const { search } = useLocation()
+  // Read once when the list loads: enough to tell played bookings apart.
+  const [now] = useState(Date.now)
   return (
     <div className="table-wrap">
       <table className="table">
@@ -30,6 +35,8 @@ export function BookingsTable({ bookings, onCancel }: BookingsTableProps) {
         <tbody>
           {bookings.map((b) => {
             const canceled = b.status === 'canceled'
+            // Bookings already played can't be changed or canceled (the server refuses too).
+            const played = Date.parse(b.end_time) <= now
             return (
               <tr key={b.id} className={canceled ? 'row-muted' : undefined}>
                 <td className="mono">#{b.booking_number}</td>
@@ -71,12 +78,13 @@ export function BookingsTable({ bookings, onCancel }: BookingsTableProps) {
                   </div>
                 </td>
                 <td className="table-actions">
-                  {canceled ? (
+                  {canceled || played ? (
                     <span className="icon-btn-placeholder" />
                   ) : (
                     <>
                       <Link
                         to={`/bookings/${b.id}/edit`}
+                        state={{ back: `/bookings${search}` }}
                         className="icon-btn"
                         aria-label={`Edit booking ${b.booking_number}`}
                         title="Edit"
@@ -104,11 +112,11 @@ export function BookingsTable({ bookings, onCancel }: BookingsTableProps) {
   )
 }
 
-/** Readable add-ons of a booking: on/off ones by name when on, others as "name: value". */
+/** Readable add-ons of a booking: on/off ones by name when on, others as "name: value" (not 0). */
 function addOnLabels(b: Booking): string[] {
   return b.options.flatMap((o) => {
     const name = (o.name ?? '').trim()
-    if (o.value === 'false') return []
+    if (o.value === 'false' || o.value.trim() === '0') return []
     if (o.value === 'true') return name ? [name] : []
     return [name ? `${name}: ${o.value.trim()}` : o.value.trim()]
   })
