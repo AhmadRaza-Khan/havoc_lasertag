@@ -1,10 +1,20 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { BUSINESS } from './business'
 import './legal.css'
 
 /** Public page frame for the policies and account deletion (no login). */
 export function LegalLayout({ title, children }: { title: string; children: ReactNode }) {
+  // Players land here from the app and the store listings: the tab says what the page is, not
+  // "Havoc Admin".
+  useEffect(() => {
+    const previous = document.title
+    document.title = `${title} · Havoc`
+    return () => {
+      document.title = previous
+    }
+  }, [title])
+
   return (
     <div className="legal">
       <header className="legal-header">

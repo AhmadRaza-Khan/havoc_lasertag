@@ -3,6 +3,7 @@
 
 mod extractor;
 mod handlers;
+mod reset;
 
 use axum::{
     Router,
@@ -21,6 +22,8 @@ pub fn routes() -> Router<AppState> {
         .route("/playername-available", get(handlers::playername_available))
         .route("/me", get(handlers::me).delete(handlers::delete_me))
         .route("/delete-account", post(handlers::delete_account_by_login))
+        .route("/forgot-password", post(reset::forgot_password))
+        .route("/reset-password", post(reset::reset_password))
 }
 
 /// Layer that rejects requests without a valid player token. Apply with `.route_layer(...)`.

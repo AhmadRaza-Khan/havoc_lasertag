@@ -1,5 +1,6 @@
-import { Navigate, Route, Routes } from 'react-router'
+import { Route, Routes } from 'react-router'
 import { AdminLayout } from '@/components/layout/AdminLayout'
+import { NotFoundPage } from '@/components/pages/NotFoundPage'
 import { GuestRoute, LoginPage, ProtectedRoute } from '@/features/auth'
 import { BookingFormPage, BookingsPage } from '@/features/bookings'
 import { ChatsPage } from '@/features/chats'
@@ -37,7 +38,7 @@ export function AppRoutes() {
         </Route>
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   )
 }

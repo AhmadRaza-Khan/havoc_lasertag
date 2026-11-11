@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
 use crate::{
-    error::AppResult,
+    error::{AppError, AppResult},
     shared::validation::{
         normalize_handle, optional_text, required_text, validate_email, validate_handle,
         validate_password, validate_phone,
@@ -50,6 +50,11 @@ pub struct ValidPlayer {
 impl PlayerInput {
     pub fn validate(self, password_required: bool) -> AppResult<ValidPlayer> {
         let full_name = required_text("Full name", &self.full_name)?;
+        if full_name.chars().count() < 2 {
+            return Err(AppError::BadRequest(
+                "Full name must be at least 2 characters".into(),
+            ));
+        }
 
         let playername = normalize_handle(&self.playername);
         validate_handle("Playername", &playername)?;

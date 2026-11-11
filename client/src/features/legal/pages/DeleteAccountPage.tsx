@@ -76,6 +76,10 @@ export default function DeleteAccountPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
+              <span className="legal-hint">
+                Forgot it? In the Havoc app, tap <strong>Forgot password?</strong> on the sign-in screen to get a reset code by
+                email.
+              </span>
             </label>
             <label className="legal-check">
               <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />I understand
