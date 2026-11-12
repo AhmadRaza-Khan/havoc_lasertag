@@ -6,11 +6,13 @@ import type {
   PaymentSettingsInput,
   SkipCashCredentials,
   SkipCashCredentialsInput,
+  StaffInput,
 } from './types'
 
 const paymentKey = ['settings', 'payments'] as const
 const skipcashKey = ['settings', 'skipcash'] as const
 const addonsKey = ['settings', 'addons'] as const
+const staffKey = ['settings', 'staff'] as const
 
 export function usePaymentSettings() {
   return useQuery({ queryKey: paymentKey, queryFn: settingsApi.payments })
@@ -90,4 +92,47 @@ export function useSetAddonPrice() {
 
 export function useRemoveAddonPrice() {
   return useAddonMutation((key: string) => settingsApi.removeAddonPrice(key))
+}
+
+export function useStaff() {
+  return useQuery({ queryKey: staffKey, queryFn: settingsApi.staff })
+}
+
+/** Staff changes refresh the list. */
+function useStaffMutation<T, R>(fn: (input: T) => Promise<R>) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: staffKey }),
+  })
+}
+
+export function useCreateStaff() {
+  return useStaffMutation((input: StaffInput) => settingsApi.createStaff(input))
+}
+
+export function useUpdateMe() {
+  return useStaffMutation((input: { name: string; email: string }) => settingsApi.updateMe(input))
+}
+
+export function useChangeMyPassword() {
+  return useMutation({
+    mutationFn: ({ current, next }: { current: string; next: string }) => settingsApi.changeMyPassword(current, next),
+  })
+}
+
+export function useUpdateStaff() {
+  return useStaffMutation(({ id, input }: { id: string; input: { name: string; email: string } }) =>
+    settingsApi.updateStaff(id, input),
+  )
+}
+
+export function useSetStaffPassword() {
+  return useMutation({
+    mutationFn: ({ id, password }: { id: string; password: string }) => settingsApi.setStaffPassword(id, password),
+  })
+}
+
+export function useRemoveStaff() {
+  return useStaffMutation((id: string) => settingsApi.removeStaff(id))
 }

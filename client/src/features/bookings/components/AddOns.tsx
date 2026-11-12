@@ -1,15 +1,17 @@
 import type { GameOption } from '@/features/games'
 import { apiUrl } from '@/lib/api-client'
-import type { AddOnValues } from '../addOns'
+import { maxFor, type AddOnValues } from '../addOns'
 
 type AddOnsPickerProps = {
   options: GameOption[]
   values: AddOnValues
   onChange: (id: string, value: string) => void
+  /** People in the booking: per-player add-ons go up to this. */
+  people: number
 }
 
 /** Bookeo's add-ons for the selected game (e.g. "UPGRADE YOUR BATTLE"). */
-export function AddOnsPicker({ options, values, onChange }: AddOnsPickerProps) {
+export function AddOnsPicker({ options, values, onChange, people }: AddOnsPickerProps) {
   return (
     <div className="addons">
       {options.map((o) => (
@@ -77,7 +79,7 @@ export function AddOnsPicker({ options, values, onChange }: AddOnsPickerProps) {
                 aria-label={o.name}
                 className="addon-number"
                 min={o.min ?? undefined}
-                max={o.max ?? undefined}
+                max={maxFor(o, people) ?? undefined}
                 value={values[o.id] ?? ''}
                 onChange={(e) => onChange(o.id, e.target.value)}
               />

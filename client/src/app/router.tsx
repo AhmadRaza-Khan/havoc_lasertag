@@ -1,7 +1,7 @@
-import { Route, Routes } from 'react-router'
+import { Navigate, Route, Routes } from 'react-router'
 import { AdminLayout } from '@/components/layout/AdminLayout'
 import { NotFoundPage } from '@/components/pages/NotFoundPage'
-import { GuestRoute, LoginPage, ProtectedRoute } from '@/features/auth'
+import { ForgotPasswordPage, GuestRoute, LoginPage, ProtectedRoute } from '@/features/auth'
 import { BookingFormPage, BookingsPage } from '@/features/bookings'
 import { ChatsPage } from '@/features/chats'
 import { DashboardPage } from '@/features/dashboard'
@@ -21,6 +21,7 @@ export function AppRoutes() {
 
       <Route element={<GuestRoute />}>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       </Route>
 
       {/* Authenticated admin area. Keep in sync with the sidebar in navigation.ts */}
@@ -39,6 +40,18 @@ export function AppRoutes() {
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />
+    </Routes>
+  )
+}
+
+/** The players' policy site: only the public pages; anything else goes to the privacy policy. */
+export function PublicRoutes() {
+  return (
+    <Routes>
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/terms" element={<TermsPage />} />
+      <Route path="/delete-account" element={<DeleteAccountPage />} />
+      <Route path="*" element={<Navigate to="/privacy" replace />} />
     </Routes>
   )
 }

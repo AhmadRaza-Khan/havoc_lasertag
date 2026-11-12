@@ -46,15 +46,24 @@ export function addOnLines(options: GameOption[], values: AddOnValues): string[]
   })
 }
 
+/** Highest quantity allowed: Bookeo's maximum, and one per player for per-player add-ons. */
+export function maxFor(o: GameOption, people: number): number | null {
+  if (!o.per_player || !Number.isFinite(people) || people < 1) return o.max
+  return o.max === null ? people : Math.min(o.max, people)
+}
+
 /** Problems that block saving (required text add-ons, numbers out of range). */
-export function addOnsError(options: GameOption[], values: AddOnValues): string | null {
+export function addOnsError(options: GameOption[], values: AddOnValues, people: number): string | null {
   for (const o of options) {
     const v = (values[o.id] ?? '').trim()
     if (o.kind === 'text' && o.required && !v) return `“${o.name}” is required.`
     if (o.kind === 'number' && v !== '') {
       const n = Number(v)
-      if (!Number.isInteger(n) || (o.min !== null && n < o.min) || (o.max !== null && n > o.max)) {
-        return `“${o.name}” must be a whole number from ${o.min} to ${o.max}.`
+      const max = maxFor(o, people)
+      if (!Number.isInteger(n) || (o.min !== null && n < o.min) || (max !== null && n > max)) {
+        return o.per_player && max !== o.max
+          ? `“${o.name}” is per player: at most ${max} for ${people} player${people === 1 ? '' : 's'}.`
+          : `“${o.name}” must be a whole number from ${o.min} to ${max}.`
       }
     }
   }

@@ -45,6 +45,7 @@ pub fn router(state: &AppState) -> Router<AppState> {
         .nest("/stats", stats::admin_routes())
         .nest("/offers", offers::admin_routes())
         .nest("/chats", chats::admin_routes())
+        .nest("/users", users::routes())
         .nest(
             "/settings",
             payments::admin_routes().merge(addons::admin_routes()),

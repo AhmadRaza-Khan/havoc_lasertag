@@ -34,7 +34,16 @@ export function PlayersTable({ players, onEdit, onDelete }: PlayersTableProps) {
                 </div>
               </td>
               <td>{p.phone ?? <span className="muted">—</span>}</td>
-              <td>{p.email ?? <span className="muted">—</span>}</td>
+              <td>
+                {p.email ? (
+                  <div className="stack-cell">
+                    <span>{p.email}</span>
+                    {!p.email_verified && <span className="muted small">Not verified</span>}
+                  </div>
+                ) : (
+                  <span className="muted">—</span>
+                )}
+              </td>
               <td>{formatDate(p.created_at)}</td>
               <td className="table-actions">
                 <Link to={`/players/${p.id}/stats`} className="icon-btn" aria-label={`Stats of ${p.playername}`} title="Stats">

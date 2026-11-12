@@ -14,7 +14,7 @@ pub async fn list(
     offset: i64,
 ) -> sqlx::Result<(Vec<Player>, i64)> {
     let items = sqlx::query_as(
-        "SELECT id, full_name, playername, phone, email, created_at, updated_at,
+        "SELECT id, full_name, playername, phone, email, email_verified_at IS NOT NULL AS email_verified, created_at, updated_at,
                 CASE WHEN avatar_updated_at IS NULL THEN NULL ELSE '/api/avatars/' || id || '?v=' || floor(extract(epoch FROM avatar_updated_at) * 1000)::bigint END AS avatar_url
          FROM players
          WHERE id <> $4 AND ($1::text IS NULL OR playername ILIKE $1 OR full_name ILIKE $1
@@ -46,7 +46,7 @@ pub async fn list(
 
 pub async fn find_by_id(db: &PgPool, id: Uuid) -> sqlx::Result<Option<Player>> {
     sqlx::query_as(
-        "SELECT id, full_name, playername, phone, email, created_at, updated_at,
+        "SELECT id, full_name, playername, phone, email, email_verified_at IS NOT NULL AS email_verified, created_at, updated_at,
                 CASE WHEN avatar_updated_at IS NULL THEN NULL ELSE '/api/avatars/' || id || '?v=' || floor(extract(epoch FROM avatar_updated_at) * 1000)::bigint END AS avatar_url
          FROM players WHERE id = $1",
     )
@@ -59,7 +59,7 @@ pub async fn create(db: &PgPool, p: &ValidPlayer, password_hash: &str) -> sqlx::
     sqlx::query_as(
         "INSERT INTO players (full_name, playername, phone, email, password_hash)
          VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, full_name, playername, phone, email, created_at, updated_at,
+         RETURNING id, full_name, playername, phone, email, email_verified_at IS NOT NULL AS email_verified, created_at, updated_at,
                 CASE WHEN avatar_updated_at IS NULL THEN NULL ELSE '/api/avatars/' || id || '?v=' || floor(extract(epoch FROM avatar_updated_at) * 1000)::bigint END AS avatar_url",
     )
     .bind(&p.full_name)
@@ -88,9 +88,12 @@ pub async fn update(
              -- A new password signs out every existing session (see shared::jwt).
              password_changed_at = CASE WHEN $6 IS NULL THEN password_changed_at
                                         ELSE date_trunc('second', now()) END,
+             -- A new address has to be verified again.
+             email_verified_at = CASE WHEN lower(email) IS DISTINCT FROM lower($5) THEN NULL
+                                      ELSE email_verified_at END,
              updated_at = now()
          WHERE id = $1
-         RETURNING id, full_name, playername, phone, email, created_at, updated_at,
+         RETURNING id, full_name, playername, phone, email, email_verified_at IS NOT NULL AS email_verified, created_at, updated_at,
                 CASE WHEN avatar_updated_at IS NULL THEN NULL ELSE '/api/avatars/' || id || '?v=' || floor(extract(epoch FROM avatar_updated_at) * 1000)::bigint END AS avatar_url",
     )
     .bind(id)
@@ -168,4 +171,27 @@ pub async fn password_changed_at(
         .bind(id)
         .fetch_optional(db)
         .await
+}
+
+/// Marks the player's current email address verified.
+pub async fn set_email_verified(db: &PgPool, id: Uuid) -> sqlx::Result<()> {
+    sqlx::query("UPDATE players SET email_verified_at = now(), updated_at = now() WHERE id = $1")
+        .bind(id)
+        .execute(db)
+        .await?;
+    Ok(())
+}
+
+/// Sets a new password; every existing session ends (see shared::jwt).
+pub async fn set_password(db: &PgPool, id: Uuid, password_hash: &str) -> sqlx::Result<()> {
+    sqlx::query(
+        "UPDATE players SET password_hash = $2, password_changed_at = date_trunc('second', now()),
+             updated_at = now()
+         WHERE id = $1",
+    )
+    .bind(id)
+    .bind(password_hash)
+    .execute(db)
+    .await?;
+    Ok(())
 }

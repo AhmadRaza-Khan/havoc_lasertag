@@ -3,24 +3,47 @@ import { Link } from 'react-router'
 import { apiRequest } from '@/lib/api-client'
 import { LegalLayout } from '../LegalLayout'
 
-/** Public account deletion (Google Play requires one that works without the app). */
+/**
+ * Public account deletion (Google Play requires one that works without the app). Two steps: the
+ * playername and password, then a code emailed to the account's confirmed address.
+ */
 export default function DeleteAccountPage() {
   const [playername, setPlayername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmed, setConfirmed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [sentTo, setSentTo] = useState<string | null>(null)
+  const [code, setCode] = useState('')
   const [done, setDone] = useState(false)
 
-  async function submit(e: FormEvent) {
-    e.preventDefault()
+  async function requestCode(e?: FormEvent) {
+    e?.preventDefault()
     if (!confirmed || busy) return
     setBusy(true)
     setError(null)
     try {
-      await apiRequest<void>('/player/auth/delete-account', {
+      const res = await apiRequest<{ email_hint: string }>('/player/auth/delete-account', {
         method: 'POST',
         body: JSON.stringify({ playername: playername.trim(), password }),
+      })
+      setSentTo(res.email_hint)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not continue. Please try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function confirmDeletion(e: FormEvent) {
+    e.preventDefault()
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      await apiRequest<void>('/player/auth/delete-account/confirm', {
+        method: 'POST',
+        body: JSON.stringify({ playername: playername.trim(), code: code.trim() }),
       })
       setDone(true)
     } catch (err) {
@@ -33,8 +56,8 @@ export default function DeleteAccountPage() {
   return (
     <LegalLayout title="Delete your Havoc account">
       <p>
-        You can delete your account here or in the app (Profile → Delete account). Deleting is permanent and happens
-        straight away. It removes:
+        You can delete your account here or in the app (Profile → Delete account). To delete it here, we email a code to
+        your account’s confirmed email address. Deleting is permanent. It removes:
       </p>
       <ul>
         <li>your account details (name, playername, email, phone and password)</li>
@@ -53,9 +76,39 @@ export default function DeleteAccountPage() {
         <div className="legal-done" role="status">
           Your account has been deleted. Thank you for playing at Havoc.
         </div>
+      ) : sentTo ? (
+        <div className="legal-card">
+          <form className="legal-form" onSubmit={confirmDeletion}>
+            <p>
+              We’ve emailed a 6-digit code to <strong>{sentTo}</strong>. It works for 15 minutes.
+            </p>
+            <label>
+              Code from the email
+              <input
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                required
+                maxLength={6}
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              />
+            </label>
+            {error && (
+              <p className="legal-error" role="alert">
+                {error}
+              </p>
+            )}
+            <button type="submit" className="legal-danger" disabled={busy || code.length !== 6}>
+              {busy ? 'Deleting…' : 'Delete my account permanently'}
+            </button>
+            <button type="button" className="legal-link-button" disabled={busy} onClick={() => void requestCode()}>
+              Send a new code
+            </button>
+          </form>
+        </div>
       ) : (
         <div className="legal-card">
-          <form className="legal-form" onSubmit={submit}>
+          <form className="legal-form" onSubmit={requestCode}>
             <label>
               Playername
               <input
@@ -91,7 +144,7 @@ export default function DeleteAccountPage() {
               </p>
             )}
             <button type="submit" className="legal-danger" disabled={!confirmed || busy || !playername.trim() || !password}>
-              {busy ? 'Deleting…' : 'Delete my account permanently'}
+              {busy ? 'Checking…' : 'Continue'}
             </button>
           </form>
         </div>

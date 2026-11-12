@@ -4,6 +4,8 @@ export type Player = {
   playername: string
   phone: string | null
   email: string | null
+  /** The player confirmed this address with the emailed code. */
+  email_verified: boolean
   created_at: string
   updated_at: string
 }

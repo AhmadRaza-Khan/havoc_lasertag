@@ -8,7 +8,10 @@ mod player_handlers;
 mod repository;
 mod service;
 
-use axum::{Router, routing::get};
+use axum::{
+    Router,
+    routing::{get, put},
+};
 
 use crate::state::AppState;
 
@@ -52,4 +55,5 @@ pub fn admin_routes() -> Router<AppState> {
                 .put(admin_handlers::update)
                 .delete(admin_handlers::cancel),
         )
+        .route("/{id}/refund", put(admin_handlers::set_refund))
 }

@@ -85,6 +85,10 @@ pub async fn signup(
     tracing::info!(player_id = %player.id, playername = %player.playername, "player signed up in the app");
     // Stats from earlier uploads that listed this name become theirs.
     stats::link_unclaimed_records(&state, player.id, &player.playername).await;
+    // Their email is confirmed with a code before they can use the app (see `account`).
+    if let Err(e) = super::account::send_verification(&state, &player).await {
+        tracing::warn!(player_id = %player.id, "could not send the email verification code: {e}");
+    }
 
     let token = jwt::create_token(
         player.id,
@@ -168,32 +172,7 @@ pub async fn delete_me(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// `POST /api/player/auth/delete-account`: the same, from the website's deletion page (Google
-/// Play requires a way to delete an account without the app).
-pub async fn delete_account_by_login(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(req): Json<LoginRequest>,
-) -> AppResult<StatusCode> {
-    let invalid = || AppError::Unauthorized("Invalid playername or password".into());
-    let playername = normalize_handle(&req.playername);
-    let attempt = Attempt::new("delete", &playername, &headers);
-    state.login_throttle.check(&attempt)?;
-    let credentials = players::find_credentials(&state.db, &playername).await?;
-    let hash = credentials.as_ref().map(|(_, h)| h.clone());
-    if !password::verify_or_dummy(req.password, hash).await? {
-        state.login_throttle.record_failure(&attempt);
-        return Err(invalid());
-    }
-    let (id, _) = credentials.ok_or_else(invalid)?;
-    state.login_throttle.record_success(&attempt);
-    delete_account(&state, id).await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-/// Deletes the player and everything that's theirs (bookings here, chats, picture, push
-/// tokens); game stats stay, unlinked. Their open chat sockets close at once.
-async fn delete_account(state: &AppState, id: uuid::Uuid) -> AppResult<()> {
+pub(super) async fn delete_account(state: &AppState, id: uuid::Uuid) -> AppResult<()> {
     players_module::delete_player(&state.db, id).await?;
     chats::disconnect_player(state, id);
     tracing::info!(player_id = %id, "player deleted their account");

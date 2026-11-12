@@ -8,7 +8,7 @@ import { SearchInput } from '@/components/ui/SearchInput'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { formatDay, formatTimeRange } from '@/lib/format'
 import { BookingsTable } from '../components/BookingsTable'
-import { useBookings, useCancelBooking } from '../hooks'
+import { useBookings, useCancelBooking, useSetRefund } from '../hooks'
 import type { Booking, BookingListParams, BookingStatus } from '../types'
 import '../bookings.css'
 
@@ -70,6 +70,8 @@ export default function BookingsPage() {
   const { data, isPending, isError, error, isFetching } = useBookings(params)
 
   const [toCancel, setToCancel] = useState<Booking | null>(null)
+  const [toRefund, setToRefund] = useState<Booking | null>(null)
+  const setRefund = useSetRefund()
   const cancelBooking = useCancelBooking()
 
   return (
@@ -144,6 +146,10 @@ export default function BookingsPage() {
                 cancelBooking.reset()
                 setToCancel(b)
               }}
+              onRefund={(b) => {
+                setRefund.reset()
+                setToRefund(b)
+              }}
             />
             <Pagination
               page={data.page}
@@ -167,6 +173,16 @@ export default function BookingsPage() {
               <strong>{toCancel.player.full_name}</strong> — {toCancel.game_name},{' '}
               {formatDay(toCancel.start_time)} {formatTimeRange(toCancel.start_time, toCancel.end_time)}
               ? The seats are released in Bookeo. The booking stays listed as canceled.
+              {Number(toCancel.amount_paid) > 0 && (
+                <>
+                  {' '}
+                  <strong>
+                    {toCancel.price?.currency ?? 'QAR'} {Number(toCancel.amount_paid).toFixed(2)} was paid online:
+                  </strong>{' '}
+                  the booking will show “Refund pending”. Refund it from the SkipCash merchant portal, then mark it
+                  refunded here.
+                </>
+              )}
             </>
           )
         }
@@ -176,6 +192,37 @@ export default function BookingsPage() {
           toCancel && cancelBooking.mutate(toCancel.id, { onSuccess: () => setToCancel(null) })
         }
         onClose={() => setToCancel(null)}
+      />
+
+      <ConfirmDialog
+        open={toRefund !== null}
+        title={toRefund?.refund_status === 'pending' ? 'Mark refunded' : 'Undo refunded'}
+        confirmLabel={toRefund?.refund_status === 'pending' ? 'Mark refunded' : 'Mark not refunded'}
+        cancelLabel="Back"
+        message={
+          toRefund &&
+          (toRefund.refund_status === 'pending' ? (
+            <>
+              Booking <strong>#{toRefund.booking_number}</strong> was canceled after{' '}
+              {toRefund.price?.currency ?? 'QAR'} {Number(toRefund.amount_paid).toFixed(2)} was paid. Mark it refunded
+              once the money has been returned from the SkipCash merchant portal.
+            </>
+          ) : (
+            <>
+              Set booking <strong>#{toRefund.booking_number}</strong> back to “Refund pending”?
+            </>
+          ))
+        }
+        pending={setRefund.isPending}
+        error={setRefund.error?.message}
+        onConfirm={() =>
+          toRefund &&
+          setRefund.mutate(
+            { id: toRefund.id, status: toRefund.refund_status === 'pending' ? 'refunded' : 'pending' },
+            { onSuccess: () => setToRefund(null) },
+          )
+        }
+        onClose={() => setToRefund(null)}
       />
     </>
   )

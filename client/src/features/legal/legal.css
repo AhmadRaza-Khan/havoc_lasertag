@@ -162,3 +162,19 @@
   font-weight: 400;
   color: #6b6375;
 }
+
+.legal-link-button {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.9rem;
+  color: #d6232f;
+  cursor: pointer;
+}
+
+.legal-link-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { Link, useLocation } from 'react-router'
 import type { FormEvent } from 'react'
 import { useAuth } from '../context/AuthContext'
 
 export default function LoginPage() {
   const { login } = useAuth()
+  const reset = (useLocation().state as { reset?: boolean } | null)?.reset
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -34,6 +36,11 @@ export default function LoginPage() {
           <h1 className="login-title">Admin sign in</h1>
           <p className="muted">Sign in to continue.</p>
         </div>
+        {reset && (
+          <p className="notice notice-success" role="status">
+            Password changed. Sign in with your new password.
+          </p>
+        )}
 
         <label>
           Username
@@ -64,6 +71,9 @@ export default function LoginPage() {
         <button type="submit" className="btn btn-primary" disabled={submitting}>
           {submitting ? 'Signing in…' : 'Sign in'}
         </button>
+        <Link to="/forgot-password" className="login-forgot">
+          Forgot password?
+        </Link>
       </form>
     </div>
   )

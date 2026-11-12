@@ -126,7 +126,7 @@ function BookingForm({ booking }: { booking: Booking | null }) {
   const addOnValues: AddOnValues = Object.fromEntries(
     gameOptions.map((o) => [o.id, addOnEdits[o.id] ?? initialAddOnValue(o, booking?.options ?? null)]),
   )
-  const addOnProblem = addOnsError(gameOptions, addOnValues)
+  const addOnProblem = addOnsError(gameOptions, addOnValues, Number(numPeople))
   const chosenAddOns = addOnLines(gameOptions, addOnValues)
 
   // The chosen day's slots.
@@ -281,6 +281,7 @@ function BookingForm({ booking }: { booking: Booking | null }) {
                 options={gameOptions}
                 values={addOnValues}
                 onChange={(id, value) => setAddOnEdits((e) => ({ ...e, [id]: value }))}
+                people={Number(numPeople)}
               />
               {addOnProblem && <p className="error">{addOnProblem}</p>}
             </>
@@ -397,7 +398,7 @@ function BookingForm({ booking }: { booking: Booking | null }) {
         {booking && (
           <div className="summary-status">
             <span className="mono">#{booking.booking_number}</span>
-            <StatusBadge status={booking.status} />
+            <StatusBadge status={booking.status} booking={booking} />
           </div>
         )}
         <dl>

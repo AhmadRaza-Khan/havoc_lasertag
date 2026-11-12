@@ -131,6 +131,23 @@ p {
   font-size: 1.25rem;
 }
 
+/* "Forgot password?" / "Back to sign in": a plain link under the form. */
+.login-forgot {
+  align-self: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.login-forgot:hover {
+  text-decoration: underline;
+}
+
 .card {
   width: 100%;
   max-width: 380px;

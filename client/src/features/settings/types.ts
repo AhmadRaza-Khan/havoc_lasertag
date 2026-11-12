@@ -56,3 +56,15 @@ export type Addon = {
   /** Set in Settings, e.g. "50.00". Shown for reference: Bookeo calculates the booking's price. */
   price: string | null
 }
+
+/** A staff account of the admin panel. */
+export type StaffUser = {
+  id: string
+  username: string
+  name: string
+  email: string | null
+  is_owner: boolean
+  created_at: string
+}
+
+export type StaffInput = { username: string; name: string; email: string; password: string }

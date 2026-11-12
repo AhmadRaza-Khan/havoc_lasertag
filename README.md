@@ -129,7 +129,16 @@ Two kinds of token, never interchangeable: **admin** (web panel; httpOnly cookie
 | POST | `/api/auth/signup` | admin (or none for the very first admin) | `{username, name, password}` |
 | POST | `/api/auth/login` | — | `{username, password}` → sets httpOnly cookie, returns `{token, user}` |
 | POST | `/api/auth/logout` | — | clears cookie |
-| GET | `/api/auth/me` | cookie or `Bearer` | current user |
+| GET | `/api/auth/me` | cookie or `Bearer` | current user (`email`, `is_owner`) |
+| POST | `/api/auth/forgot-password` | — | `{login}` (username or email): emails a 6-digit code to the staff member's email (valid 15 min, one email per minute). Always 204 |
+| POST | `/api/auth/reset-password` | — | `{login, code, new_password}` → 204. 5 wrong tries end the code; signs out every existing session |
+| GET | `/api/users` | staff | the owner gets every staff account; others get only their own |
+| POST | `/api/users` | owner | `{username, name, email?, password}` → the new account (201). Emails are unique |
+| PATCH | `/api/users/me` | staff | `{name, email?}` — your own name and email (the email is where reset codes go) |
+| POST | `/api/users/me/password` | staff | `{current_password, new_password}` → 204 and a fresh cookie; other sessions are signed out. Wrong current password → 403 |
+| PATCH | `/api/users/{id}` | owner | `{name, email?}` |
+| PUT | `/api/users/{id}/password` | owner | `{password}` → 204: set a password by hand; signs that person out everywhere |
+| DELETE | `/api/users/{id}` | owner | removes a staff account (never the owner) |
 | GET | `/api/players?search=&page=&per_page=` | admin | paginated; search matches playername or full name |
 | POST | `/api/players` | admin | `{full_name, playername, phone?, email?, password}` |
 | GET | `/api/players/{id}` | admin | |
@@ -142,6 +151,15 @@ Two kinds of token, never interchangeable: **admin** (web panel; httpOnly cookie
 | GET | `/api/bookings/{id}` | admin | status refreshed from Bookeo |
 | PUT | `/api/bookings/{id}` | admin | `{event_id, num_people, other_player_ids?, options?}` — move to another slot of the same game / change group size / add-ons (omitted `options` keeps the current ones; they're re-sent to Bookeo, which replaces the whole booking) |
 | DELETE | `/api/bookings/{id}` | admin | cancels in Bookeo (seats freed); the booking stays listed as `canceled` |
+| PUT | `/api/bookings/{id}/refund` | admin | `{status: refunded\|pending}` → booking. Only for canceled bookings that were paid (else 409) |
+
+A canceled booking that was paid (any way it's canceled: panel, app, Bookeo, unpaid deadline, or a
+payment that arrives after the cancel) gets `refund_status: pending` ("Refund pending"). Staff refund
+it in the SkipCash merchant portal and mark it refunded here; a SkipCash refund webhook marks it
+refunded by itself. Bookings carry `refund_status` (`null`, `pending`, `refunded`) and `refunded_at`.
+
+Per-player add-ons (Bookeo options whose name contains "player") can't exceed the number of people
+in the booking; games mark them with `options[].per_player`. Enforced by the server, the panel and the app.
 
 Admin booking changes are sent to Bookeo as staff actions (`mode=backend`) without notifying staff;
 player bookings notify staff. Customers get Bookeo's emails when they have an email address.
@@ -180,9 +198,14 @@ player bookings notify staff. Customers get Bookeo's emails when they have an em
 | POST | `/api/player/auth/login` | `{playername, password}` → `{token, player}`; send `Authorization: Bearer <token>` afterwards |
 | POST | `/api/player/auth/signup` | `{full_name, playername, email, phone, password}` (email and phone required) → `{token, player}` (201), signed in. 409 if the playername is taken; at most 5 sign-ups per network per 15 min (429). Admins can still create players in the panel |
 | GET | `/api/player/auth/playername-available?playername=` | `{playername, available, reason}` — for the sign-up form (format rules + taken) |
-| GET | `/api/player/auth/me` | current player |
+| GET | `/api/player/auth/me` | current player; `email_verified` is false until the emailed code is entered (the app shows the confirmation screen until then) |
+| PATCH | `/api/player/auth/me` | `{full_name, email, phone}` → player. A new email must be confirmed again: a code is sent to it |
+| POST | `/api/player/auth/email/send-code` | sends a new 6-digit code to the player's email → `{sent}` (`false` within a minute of the last one). Sign-up sends the first one. `?if_none=true` sends only if no working code is pending: the app asks this when the confirmation screen opens, so accounts made before confirmation existed get their first code |
+| POST | `/api/player/auth/email/verify` | `{code}` → player (confirmed). 5 wrong tries end the code |
+| POST | `/api/player/auth/change-password` | `{current_password, new_password}` → `{token, player}`: a fresh token for this phone; other sessions are signed out. Wrong current password → 403 |
 | DELETE | `/api/player/auth/me` | `{password}` → 204: deletes the signed-in player's account (store requirement): account, bookings in the app, chats, picture, push tokens; game stats stay, unlinked. Wrong password → 403 (not 401, so the app stays signed in); throttled like login |
-| POST | `/api/player/auth/delete-account` | `{playername, password}` → 204: the same, for the public deletion page (no app needed) |
+| POST | `/api/player/auth/delete-account` | `{playername, password}` → `{email_hint}`: for the public deletion page (no app needed). Emails a 6-digit code to the account's confirmed email; 409 if the email isn't confirmed |
+| POST | `/api/player/auth/delete-account/confirm` | `{playername, code}` → 204: deletes the account as above |
 | PUT | `/api/player/me/avatar` | profile picture: multipart field `file`, JPEG/PNG/WebP (checked by content), max 900 KB (the app sends a ~1024 px JPEG) → updated player |
 | DELETE | `/api/player/me/avatar` | remove the picture → updated player |
 | GET | `/api/avatars/{player_id}?v=…` | the picture (no token; cached for a year — the `v` changes with each upload). Players, chat players and leaderboard entries carry it as `avatar_url` (a path: prefix the API origin) |
@@ -328,7 +351,7 @@ in messages are masked automatically (`shared/profanity.rs`).
 | GET | `/api/chats/reports?status=open\|resolved` | admin: reports, newest first |
 | POST | `/api/chats/reports/{id}/resolve` | admin: mark handled |
 
-Public pages (admin web app, no login): `/privacy`, `/terms`, `/delete-account`. Store listing
+Public pages (no login): `/privacy`, `/terms`, `/delete-account` at https://policy.havoc-tlt.com (the same web build: on that host it shows only these pages; the app links there). Store listing
 answers: `STORE_SUBMISSION.md`.
 
 ### Chats as Havoc Admin (admin panel)

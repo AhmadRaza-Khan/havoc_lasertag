@@ -50,8 +50,7 @@ pub async fn login(
         }
     };
 
-    let mut cookie = auth_cookie(&state, token.clone());
-    cookie.set_max_age(time::Duration::hours(state.config.jwt_ttl_hours));
+    let cookie = session_cookie(&state, token.clone());
 
     Ok((
         jar.add(cookie),
@@ -70,6 +69,13 @@ pub async fn logout(State(state): State<AppState>, jar: CookieJar) -> (CookieJar
 pub async fn me(State(state): State<AppState>, auth: AuthUser) -> AppResult<Json<PublicUser>> {
     let user = service::current_user(&state.db, auth.id).await?;
     Ok(Json(user.into()))
+}
+
+/// The signed-in session cookie, lasting as long as the token.
+pub(super) fn session_cookie(state: &AppState, token: String) -> Cookie<'static> {
+    let mut cookie = auth_cookie(state, token);
+    cookie.set_max_age(time::Duration::hours(state.config.jwt_ttl_hours));
+    cookie
 }
 
 fn auth_cookie(state: &AppState, value: String) -> Cookie<'static> {

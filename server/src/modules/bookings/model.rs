@@ -28,6 +28,9 @@ pub struct BookingRow {
     pub amount_paid: String,
     /// Unpaid bookings are canceled after this.
     pub payment_due_at: Option<DateTime<Utc>>,
+    /// Paid bookings that were canceled: `pending` until the money is refunded, then `refunded`.
+    pub refund_status: Option<String>,
+    pub refunded_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

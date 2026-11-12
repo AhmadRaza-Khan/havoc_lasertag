@@ -7,12 +7,27 @@ const LABELS: Record<BookingStatus, string> = {
   canceled: 'Canceled',
 }
 
-export function StatusBadge({ status }: { status: BookingStatus }) {
+/**
+ * Bookeo's status. A pending booking that has been paid says so, so staff can tell it from an
+ * unpaid one waiting for approval.
+ */
+export function StatusBadge({ status, booking }: { status: BookingStatus; booking?: Booking }) {
+  const paid = booking && (booking.payment_status === 'paid' || booking.payment_status === 'partially_paid')
+  if (status === 'pending' && paid) {
+    return (
+      <span className="badge badge-pending" title="Paid in the app; waiting for staff approval in Bookeo">
+        Paid – awaiting approval
+      </span>
+    )
+  }
   return <span className={`badge badge-${status}`}>{LABELS[status]}</span>
 }
 
 /** Online payment state of an app booking; nothing for bookings with nothing to pay online. */
 export function PaymentBadge({ booking }: { booking: Booking }) {
+  // Paid, then canceled: the money is owed back until staff refund it.
+  if (booking.refund_status === 'pending') return <span className="badge badge-unpaid">Refund pending</span>
+  if (booking.refund_status === 'refunded') return <span className="badge badge-canceled">Refunded</span>
   if (booking.payment_status === 'paid') return <span className="badge badge-paid">Paid</span>
   if (booking.payment_status === 'partially_paid') {
     const price = booking.price

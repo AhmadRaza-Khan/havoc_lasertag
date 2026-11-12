@@ -24,6 +24,9 @@ export type Booking = {
   amount_paid: string
   /** Unpaid bookings are canceled automatically after this. */
   payment_due_at: string | null
+  /** Canceled after being paid: `pending` until the money is refunded, then `refunded`. */
+  refund_status: 'pending' | 'refunded' | null
+  refunded_at: string | null
   player: { id: string; full_name: string; playername: string }
   /** Other registered players in the group (num_people includes them). */
   other_players: { id: string; full_name: string; playername: string }[]

@@ -290,6 +290,9 @@ pub async fn mark_paid(
              payment_status = CASE
                  WHEN b.price_amount IS NOT NULL AND paid.total >= b.price_amount::numeric THEN 'paid'
                  ELSE 'partially_paid' END,
+             -- Paid after it was canceled: the money has to go back.
+             refund_status = CASE WHEN b.status = 'canceled' THEN 'pending' ELSE b.refund_status END,
+             refunded_at = CASE WHEN b.status = 'canceled' THEN NULL ELSE b.refunded_at END,
              updated_at = now()
          FROM paid WHERE b.id = $1",
     )

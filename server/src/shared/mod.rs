@@ -1,5 +1,6 @@
 //! Cross-cutting helpers used by several feature modules.
 
+pub mod email_code;
 pub mod html;
 pub mod image;
 pub mod jwt;

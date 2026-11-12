@@ -4,6 +4,7 @@ import { CircleCheck, TriangleAlert } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { AddonImagesSettings } from '../components/AddonImagesSettings'
 import { SkipCashSettings } from '../components/SkipCashSettings'
+import { StaffSettings } from '../components/StaffSettings'
 import { usePaymentSettings, useSavePaymentSettings } from '../hooks'
 import type { PaymentMode, PaymentSettings } from '../types'
 import '../settings.css'
@@ -30,7 +31,7 @@ export default function SettingsPage() {
 
   return (
     <>
-      <PageHeader title="Settings" description="How bookings made in the mobile app are paid." />
+      <PageHeader title="Settings" description="Payments, add-ons and staff accounts." />
       <div className="panel panel-padded">
         {isPending ? (
           <p className="muted">Loading settings…</p>
@@ -45,6 +46,9 @@ export default function SettingsPage() {
       </div>
       <div className="panel panel-padded settings-panel">
         <AddonImagesSettings />
+      </div>
+      <div className="panel panel-padded settings-panel">
+        <StaffSettings />
       </div>
     </>
   )

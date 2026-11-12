@@ -1,5 +1,6 @@
-.game-cell {
-  max-width: 220px;
+.table td.game-cell {
+  min-width: 200px;
+  max-width: 240px;
   /* Long game names wrap instead of widening the table. */
   white-space: normal;
   overflow-wrap: anywhere;

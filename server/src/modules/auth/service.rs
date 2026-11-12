@@ -19,7 +19,7 @@ pub async fn signup(db: &PgPool, req: SignupRequest, by_admin: bool) -> AppResul
     let hash = password::hash(req.password).await?;
 
     let created = if by_admin {
-        users::create(db, &req.username, &req.name, &hash)
+        users::create(db, &req.username, &req.name, None, &hash)
             .await
             .map(Some)
     } else {

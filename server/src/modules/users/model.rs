@@ -8,6 +8,10 @@ pub struct User {
     pub id: Uuid,
     pub username: String,
     pub name: String,
+    /// For resetting a forgotten password. Optional: the owner can always reset it by hand.
+    pub email: Option<String>,
+    /// The owner manages staff accounts (the first account created).
+    pub is_owner: bool,
     pub password_hash: String,
     pub created_at: DateTime<Utc>,
 }
@@ -18,6 +22,8 @@ pub struct PublicUser {
     pub id: Uuid,
     pub username: String,
     pub name: String,
+    pub email: Option<String>,
+    pub is_owner: bool,
     pub created_at: DateTime<Utc>,
 }
 
@@ -27,6 +33,8 @@ impl From<User> for PublicUser {
             id: u.id,
             username: u.username,
             name: u.name,
+            email: u.email,
+            is_owner: u.is_owner,
             created_at: u.created_at,
         }
     }

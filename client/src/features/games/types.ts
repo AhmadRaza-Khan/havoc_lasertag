@@ -33,6 +33,8 @@ export type GameOption = {
   image_url: string | null
   /** Set in Settings, e.g. "50.00". Shown for reference: Bookeo calculates the booking's price. */
   price: string | null
+  /** A number add-on taken per player: at most one per player in the booking. */
+  per_player: boolean
 }
 
 export type Slot = {

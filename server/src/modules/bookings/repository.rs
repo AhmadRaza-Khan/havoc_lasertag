@@ -9,7 +9,17 @@ use sqlx::types::Json;
 /// Every query aliases `bookings` as `b` so the same column list works with joins.
 const COLUMNS: &str = "b.id, b.player_id, b.bookeo_booking_number, b.product_id, b.product_name, \
     b.event_id, b.start_time, b.end_time, b.num_people, b.other_players, b.status, b.price_amount, b.price_currency, b.options, \
-    b.payment_status, b.amount_paid::text AS amount_paid, b.payment_due_at, b.created_at, b.updated_at";
+    b.payment_status, b.amount_paid::text AS amount_paid, b.payment_due_at, b.refund_status, b.refunded_at, \
+    b.created_at, b.updated_at";
+
+/// SET clause: a paid booking that becomes canceled is waiting for its refund. `status` is the
+/// SQL expression of the new status.
+fn refund_on_cancel(status: &str) -> String {
+    format!(
+        "refund_status = CASE WHEN {status} = 'canceled' AND b.amount_paid > 0
+                              THEN COALESCE(b.refund_status, 'pending') ELSE b.refund_status END"
+    )
+}
 
 const PLAYER_COLUMNS: &str = "p.full_name AS player_full_name, p.playername AS player_playername";
 
@@ -185,9 +195,10 @@ pub async fn cancel_by_booking_number(
     booking_number: &str,
 ) -> sqlx::Result<Option<BookingRow>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "UPDATE bookings AS b SET status = 'canceled', updated_at = now()
+        "UPDATE bookings AS b SET status = 'canceled', {}, updated_at = now()
          WHERE b.bookeo_booking_number = $1 AND b.status <> 'canceled'
-         RETURNING {COLUMNS}"
+         RETURNING {COLUMNS}",
+        refund_on_cancel("'canceled'")
     )))
     .bind(booking_number)
     .fetch_optional(db)
@@ -243,9 +254,11 @@ pub async fn apply_changes(
                  THEN CASE WHEN b.amount_paid >= COALESCE($7, b.price_amount)::numeric
                            THEN 'paid' ELSE 'partially_paid' END
                  ELSE b.payment_status END,
+             {},
              updated_at = now()
          WHERE b.id = $1
-         RETURNING {COLUMNS}"
+         RETURNING {COLUMNS}",
+        refund_on_cancel("$4")
     )))
     .bind(id)
     .bind(c.event_id)
@@ -277,12 +290,30 @@ pub async fn player_summaries(
 
 pub async fn set_status(db: &PgPool, id: Uuid, status: &str) -> sqlx::Result<BookingRow> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "UPDATE bookings AS b SET status = $2, updated_at = now()
+        "UPDATE bookings AS b SET status = $2, {}, updated_at = now()
          WHERE b.id = $1
-         RETURNING {COLUMNS}"
+         RETURNING {COLUMNS}",
+        refund_on_cancel("$2")
     )))
     .bind(id)
     .bind(status)
     .fetch_one(db)
+    .await
+}
+
+/// Staff mark a canceled booking's money refunded (or back to waiting). `None` unless the booking
+/// is canceled and something was paid.
+pub async fn set_refund(db: &PgPool, id: Uuid, refunded: bool) -> sqlx::Result<Option<BookingRow>> {
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "UPDATE bookings AS b SET
+             refund_status = CASE WHEN $2 THEN 'refunded' ELSE 'pending' END,
+             refunded_at = CASE WHEN $2 THEN now() ELSE NULL END,
+             updated_at = now()
+         WHERE b.id = $1 AND b.status = 'canceled' AND b.amount_paid > 0
+         RETURNING {COLUMNS}"
+    )))
+    .bind(id)
+    .bind(refunded)
+    .fetch_optional(db)
     .await
 }

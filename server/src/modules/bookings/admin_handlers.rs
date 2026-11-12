@@ -61,6 +61,39 @@ pub async fn cancel(
     respond(&state, id).await
 }
 
+#[derive(serde::Deserialize)]
+pub struct RefundRequest {
+    /// `refunded` or `pending`.
+    pub status: String,
+}
+
+/// `PUT /api/bookings/{id}/refund`: staff record that a canceled, paid booking's money was
+/// refunded (from the SkipCash merchant portal), or undo that.
+pub async fn set_refund(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<RefundRequest>,
+) -> AppResult<Json<BookingResponse>> {
+    let refunded = match req.status.as_str() {
+        "refunded" => true,
+        "pending" => false,
+        _ => {
+            return Err(crate::error::AppError::BadRequest(
+                "status must be refunded or pending".into(),
+            ));
+        }
+    };
+    super::repository::set_refund(&state.db, id, refunded)
+        .await?
+        .ok_or_else(|| {
+            crate::error::AppError::Conflict(
+                "Only canceled bookings that were paid can be refunded".into(),
+            )
+        })?;
+    tracing::info!(booking_id = %id, refunded, "refund status set by staff");
+    respond(&state, id).await
+}
+
 async fn respond(state: &AppState, id: Uuid) -> AppResult<Json<BookingResponse>> {
     let row = service::with_player(state, id).await?;
     let others = service::other_players_lookup(state, [&row.booking]).await?;

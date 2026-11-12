@@ -13,4 +13,7 @@ export const bookingsApi = {
     apiRequest<Booking>(`/bookings/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
   /** Cancels in Bookeo; the booking stays listed as "canceled". */
   cancel: (id: string) => apiRequest<Booking>(`/bookings/${id}`, { method: 'DELETE' }),
+  /** Records that a canceled, paid booking's money was refunded (or undoes that). */
+  setRefund: (id: string, status: 'refunded' | 'pending') =>
+    apiRequest<Booking>(`/bookings/${id}/refund`, { method: 'PUT', body: JSON.stringify({ status }) }),
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router'
-import { Ban, Pencil } from 'lucide-react'
+import { Ban, Pencil, RotateCcw, Undo2 } from 'lucide-react'
 import { formatDay, formatMoney, formatTimeRange } from '@/lib/format'
 import type { Booking } from '../types'
 import { PaymentBadge, StatusBadge } from './StatusBadge'
@@ -8,9 +8,11 @@ import { PaymentBadge, StatusBadge } from './StatusBadge'
 type BookingsTableProps = {
   bookings: Booking[]
   onCancel: (booking: Booking) => void
+  /** Mark a canceled, paid booking refunded (or not). */
+  onRefund: (booking: Booking) => void
 }
 
-export function BookingsTable({ bookings, onCancel }: BookingsTableProps) {
+export function BookingsTable({ bookings, onCancel, onRefund }: BookingsTableProps) {
   // The edit page returns to this list with the same tab and filters.
   const { search } = useLocation()
   // Read once when the list loads: enough to tell played bookings apart.
@@ -69,7 +71,7 @@ export function BookingsTable({ bookings, onCancel }: BookingsTableProps) {
                 </td>
                 <td>{b.num_people}</td>
                 <td>
-                  <StatusBadge status={b.status} />
+                  <StatusBadge status={b.status} booking={b} />
                 </td>
                 <td>
                   <div className="stack-cell price-cell">
@@ -78,7 +80,21 @@ export function BookingsTable({ bookings, onCancel }: BookingsTableProps) {
                   </div>
                 </td>
                 <td className="table-actions">
-                  {canceled || played ? (
+                  {b.refund_status ? (
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label={
+                        b.refund_status === 'pending'
+                          ? `Mark booking ${b.booking_number} refunded`
+                          : `Mark booking ${b.booking_number} not refunded`
+                      }
+                      title={b.refund_status === 'pending' ? 'Mark refunded' : 'Undo refunded'}
+                      onClick={() => onRefund(b)}
+                    >
+                      {b.refund_status === 'pending' ? <RotateCcw size={16} /> : <Undo2 size={16} />}
+                    </button>
+                  ) : canceled || played ? (
                     <span className="icon-btn-placeholder" />
                   ) : (
                     <>

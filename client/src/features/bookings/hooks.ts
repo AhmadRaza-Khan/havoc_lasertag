@@ -59,3 +59,12 @@ export function useCancelBooking() {
     onSuccess: invalidate,
   })
 }
+
+export function useSetRefund() {
+  const invalidate = useInvalidateAfterWrite()
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: 'refunded' | 'pending' }) =>
+      bookingsApi.setRefund(id, status),
+    onSuccess: invalidate,
+  })
+}

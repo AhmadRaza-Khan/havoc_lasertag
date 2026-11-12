@@ -1,11 +1,12 @@
 # Deployment
 
-Both apps run on one VPS behind nginx:
+The apps run on one VPS behind nginx:
 
 | Domain | Serves | From |
 |---|---|---|
 | `havoc-admin.cyberboost.io` | React admin panel (static files) | `/var/www/havoc/current` |
 | `havoc-api.cyberboost.io` | Rust API + chat WebSocket | `127.0.0.1:8080` (systemd `havoc-api`) |
+| `policy.havoc-tlt.com` | Players' privacy policy, terms and account deletion (the same web build shows only these pages there) | `/var/www/havoc/current` |
 
 **Everything is built on GitHub.** The VPS only receives the compiled API binary (static, no
 Rust toolchain or system libraries needed) and the React `dist/` files — no source code.
@@ -121,7 +122,7 @@ DATABASE_URL=postgres://havoc:CHANGE-ME-STRONG-PASSWORD@localhost:5432/havoc
 BIND_ADDR=127.0.0.1:8080
 JWT_SECRET=REPLACE-WITH-OUTPUT-OF-openssl-rand-base64-48
 JWT_TTL_HOURS=168
-CORS_ORIGINS=https://havoc-admin.cyberboost.io
+CORS_ORIGINS=https://havoc-admin.cyberboost.io,https://policy.havoc-tlt.com
 COOKIE_SECURE=true
 BOOKEO_API_KEY=...
 BOOKEO_SECRET_KEY=...
@@ -153,6 +154,16 @@ sudo cp deploy/nginx/havoc-admin.cyberboost.io.conf deploy/nginx/havoc-api.cyber
 sudo ln -s /etc/nginx/sites-available/havoc-admin.cyberboost.io.conf /etc/nginx/sites-enabled/
 sudo ln -s /etc/nginx/sites-available/havoc-api.cyberboost.io.conf /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+The players' policy site has its own certificate (`havoc-tlt.com` is the client's domain; its
+`policy` A record points at this VPS):
+
+```bash
+sudo certbot certonly --nginx --cert-name havoc-policy -d policy.havoc-tlt.com
+sudo cp deploy/nginx/policy.havoc-tlt.com.conf /etc/nginx/sites-available/
+sudo ln -s /etc/nginx/sites-available/policy.havoc-tlt.com.conf /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 

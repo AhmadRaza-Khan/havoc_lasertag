@@ -9,9 +9,9 @@ answers below describe what the app actually does; update them if the app change
 |---|---|
 | App name | Havoc |
 | Android package / iOS bundle ID | `com.havoc.lasertag` |
-| Privacy policy URL | https://havoc-admin.cyberboost.io/privacy |
-| Terms of use (EULA) URL | https://havoc-admin.cyberboost.io/terms |
-| Account deletion URL (Google Play) | https://havoc-admin.cyberboost.io/delete-account |
+| Privacy policy URL | https://policy.havoc-tlt.com/privacy |
+| Terms of use (EULA) URL | https://policy.havoc-tlt.com/terms |
+| Account deletion URL (Google Play) | https://policy.havoc-tlt.com/delete-account |
 | Support / marketing URL | https://www.havoc-tlt.com |
 | Support phone | +974 7132 3300 |
 

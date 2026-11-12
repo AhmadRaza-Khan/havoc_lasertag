@@ -48,6 +48,14 @@ pub struct GameOption {
     /// The price admins set, for display (Settings → Add-ons). Bookeo calculates the booking's
     /// actual price.
     pub price: Option<String>,
+    /// A number add-on taken per player (\"… / Player\"): at most one per player in the booking.
+    pub per_player: bool,
+}
+
+/// Whether a number add-on is taken per player: its Bookeo name says so (\"Hardcore Mode / Player\";
+/// \"playe\" also catches the cut-off \"Full Tactical Upgrade/ Playe\").
+pub fn is_per_player(name: &str) -> bool {
+    name.to_lowercase().contains("playe")
 }
 
 #[derive(Debug, Serialize)]
@@ -73,6 +81,7 @@ pub fn game_options(p: &Product) -> Vec<GameOption> {
         default: None,
         image_url: None,
         price: None,
+        per_player: false,
     };
     let mut out: Vec<(i32, GameOption)> = Vec::new();
     for o in &p.choice_options {
@@ -100,6 +109,7 @@ pub fn game_options(p: &Product) -> Vec<GameOption> {
                 min: Some(o.min_value),
                 max: Some(o.max_value),
                 default: Some(o.default_value.to_string()),
+                per_player: is_per_player(&o.common.name),
                 ..base(&o.common, "number")
             },
         ));

@@ -16,7 +16,10 @@ use crate::{
         self, NewBooking, NewCustomer, Participants, PeopleNumber, PhoneNumber, RequestOptions,
     },
     modules::{
-        games::{dto::people_limits, service::bookable_product},
+        games::{
+            dto::{is_per_player, people_limits},
+            service::bookable_product,
+        },
         players::repository as players,
     },
     shared::pagination::{PageParams, Paginated, like_pattern},
@@ -79,7 +82,7 @@ pub async fn create(
     let req = req.validated()?;
     let product = bookable_product(state, &req.product_id).await?;
     let participants = participants_for(&product, req.num_people)?;
-    let options = resolve_options(&product, &req.options, actor)?;
+    let options = resolve_options(&product, &req.options, actor, req.num_people)?;
 
     let player = players::find_by_id(&state.db, player_id)
         .await?
@@ -184,8 +187,12 @@ pub async fn update(
     let participants = participants_for(&product, req.num_people)?;
     // Bookeo replaces the whole booking: re-send the current add-ons unless they're changing.
     let options = match &req.options {
-        Some(inputs) => resolve_options(&product, inputs, actor)?,
-        None => row.options.0.clone(),
+        Some(inputs) => resolve_options(&product, inputs, actor, req.num_people)?,
+        None => {
+            // Fewer players: the add-ons already chosen per player must still fit.
+            check_per_player(&product, &row.options.0, req.num_people)?;
+            row.options.0.clone()
+        }
     };
     let customer_id = ensure_bookeo_customer(state, row.player_id).await?;
     let has_email = players::find_by_id(&state.db, row.player_id)
@@ -436,6 +443,7 @@ fn resolve_options(
     product: &bookeo::Product,
     inputs: &[OptionInput],
     actor: Actor,
+    num_people: i32,
 ) -> AppResult<Vec<bookeo::BookingOption>> {
     let player = matches!(actor, Actor::Player);
     let bad = |m: String| AppError::BadRequest(m);
@@ -492,6 +500,7 @@ fn resolve_options(
                         o.max_value
                     ))
                 })?;
+            per_player_fits(&o.common.name, n, num_people)?;
             out.push(option(&o.common, n.to_string()));
         } else if let Some(o) = product.on_off_options.iter().find(|o| o.common.id == id) {
             usable(&o.common)?;
@@ -529,6 +538,39 @@ fn resolve_options(
         }
     }
     Ok(out)
+}
+
+/// A per-player add-on can't be taken more times than there are players.
+fn per_player_fits(name: &str, n: i32, num_people: i32) -> AppResult<()> {
+    if is_per_player(name) && n > num_people {
+        return Err(AppError::BadRequest(format!(
+            "“{}” is per player: at most {num_people} for {num_people} player{}",
+            name.trim(),
+            if num_people == 1 { "" } else { "s" }
+        )));
+    }
+    Ok(())
+}
+
+/// Saved add-ons against a new group size (for changes that keep the add-ons).
+fn check_per_player(
+    product: &bookeo::Product,
+    options: &[bookeo::BookingOption],
+    num_people: i32,
+) -> AppResult<()> {
+    for saved in options {
+        let Some(o) = product
+            .number_options
+            .iter()
+            .find(|o| saved.id.as_deref() == Some(o.common.id.as_str()))
+        else {
+            continue;
+        };
+        if let Ok(n) = saved.value.trim().parse::<i32>() {
+            per_player_fits(&o.common.name, n, num_people)?;
+        }
+    }
+    Ok(())
 }
 
 /// Checks the group size against the game's limits and builds Bookeo's participants.
@@ -685,6 +727,7 @@ mod tests {
             &p,
             &[input("P1_UPG", "P1_UPG_FULL"), input("P1_SND", "true")],
             Actor::Player,
+            10,
         )
         .unwrap();
         assert_eq!(out.len(), 2);
@@ -696,16 +739,19 @@ mod tests {
         assert_eq!(out[1].value, "true");
         // A value's name works too; an empty choice is simply left out.
         assert_eq!(
-            resolve_options(&p, &[input("P1_UPG", "NO UPGRADE")], Actor::Admin).unwrap()[0].value,
+            resolve_options(&p, &[input("P1_UPG", "NO UPGRADE")], Actor::Admin, 10).unwrap()[0]
+                .value,
             "NO UPGRADE "
         );
         assert!(
-            resolve_options(&p, &[input("P1_UPG", "")], Actor::Admin)
+            resolve_options(&p, &[input("P1_UPG", "")], Actor::Admin, 10)
                 .unwrap()
                 .is_empty()
         );
         assert!(
-            resolve_options(&p, &[], Actor::Player).unwrap().is_empty(),
+            resolve_options(&p, &[], Actor::Player, 10)
+                .unwrap()
+                .is_empty(),
             "disabled required text is ignored"
         );
     }
@@ -714,7 +760,9 @@ mod tests {
     fn rejects_bad_addons() {
         let p = product_with_addons();
         let err = |inputs: &[OptionInput], actor| {
-            resolve_options(&p, inputs, actor).unwrap_err().to_string()
+            resolve_options(&p, inputs, actor, 10)
+                .unwrap_err()
+                .to_string()
         };
         assert!(err(&[input("P1_UPG", "nope")], Actor::Player).contains("Pick one"));
         assert!(err(&[input("P1_SND", "yes")], Actor::Player).contains("on or off"));
@@ -733,10 +781,44 @@ mod tests {
         // Staff-only options: staff yes (within range), players no.
         assert!(err(&[input("P1_STAFF", "2")], Actor::Player).contains("isn't available"));
         assert_eq!(
-            resolve_options(&p, &[input("P1_STAFF", "2")], Actor::Admin).unwrap()[0].value,
+            resolve_options(&p, &[input("P1_STAFF", "2")], Actor::Admin, 10).unwrap()[0].value,
             "2"
         );
         assert!(err(&[input("P1_STAFF", "9")], Actor::Admin).contains("from 0 to 5"));
+    }
+
+    #[test]
+    fn per_player_addons_fit_the_group() {
+        let p: bookeo::Product = serde_json::from_value(serde_json::json!({
+            "productId": "P1", "name": "Open Session", "type": "fixed",
+            "numberOptions": [
+                {"id": "P1_HC", "name": "Hardcore Mode / Player", "index": 0, "shownToCustomers": true,
+                 "enabled": true, "minValue": 0, "maxValue": 999, "defaultValue": 0},
+                {"id": "P1_FT", "name": "Full Tactical Upgrade/ Playe", "index": 1, "shownToCustomers": true,
+                 "enabled": true, "minValue": 0, "maxValue": 999, "defaultValue": 0},
+                {"id": "P1_EX", "name": "Extra minutes", "index": 2, "shownToCustomers": true,
+                 "enabled": true, "minValue": 0, "maxValue": 30, "defaultValue": 0}
+            ]
+        }))
+        .unwrap();
+        // Up to one per player is fine.
+        assert!(resolve_options(&p, &[input("P1_HC", "2")], Actor::Player, 2).is_ok());
+        // More than the players is refused, also for the cut-off "Playe" name, for staff too.
+        let err = resolve_options(&p, &[input("P1_HC", "999")], Actor::Player, 1)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("at most 1 for 1 player"), "{err}");
+        assert!(resolve_options(&p, &[input("P1_FT", "3")], Actor::Admin, 2).is_err());
+        // Add-ons that aren't per player keep only Bookeo's own limit.
+        assert!(resolve_options(&p, &[input("P1_EX", "20")], Actor::Player, 1).is_ok());
+        // Fewer players with saved add-ons.
+        let saved = vec![bookeo::BookingOption {
+            id: Some("P1_HC".into()),
+            name: None,
+            value: "3".into(),
+        }];
+        assert!(check_per_player(&p, &saved, 2).is_err());
+        assert!(check_per_player(&p, &saved, 3).is_ok());
     }
 
     #[test]

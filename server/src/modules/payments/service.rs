@@ -392,7 +392,15 @@ pub async fn on_webhook(state: &AppState, w: &WebhookPayload) -> AppResult<()> {
             repository::close(&state.db, p.id).await?
         }
         PaymentState::Refunded => {
-            tracing::warn!(booking_id = %p.booking_id, payment_id = %w.payment_id, "skipcash reports a refund")
+            tracing::warn!(booking_id = %p.booking_id, payment_id = %w.payment_id, "skipcash reports a refund");
+            // A canceled booking's refund went through.
+            sqlx::query(
+                "UPDATE bookings SET refund_status = 'refunded', refunded_at = now(), updated_at = now()
+                 WHERE id = $1 AND status = 'canceled' AND refund_status = 'pending'",
+            )
+            .bind(p.booking_id)
+            .execute(&state.db)
+            .await?;
         }
         _ => {}
     }

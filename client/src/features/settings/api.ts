@@ -1,6 +1,8 @@
 import { apiRequest } from '@/lib/api-client'
 import type {
   Addon,
+  StaffInput,
+  StaffUser,
   PaymentSettings,
   PaymentSettingsInput,
   SkipCashCredentials,
@@ -42,6 +44,21 @@ export const settingsApi = {
     }),
   removeAddonPrice: (key: string) =>
     apiRequest<Addon[]>(`/settings/addons/${encodeURIComponent(key)}/price`, { method: 'DELETE' }),
+  staff: () => apiRequest<StaffUser[]>('/users'),
+  createStaff: (input: StaffInput) =>
+    apiRequest<StaffUser>('/users', { method: 'POST', body: JSON.stringify(input) }),
+  updateMe: (input: { name: string; email: string }) =>
+    apiRequest<StaffUser>('/users/me', { method: 'PATCH', body: JSON.stringify(input) }),
+  changeMyPassword: (current: string, next: string) =>
+    apiRequest<void>('/users/me/password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password: current, new_password: next }),
+    }),
+  updateStaff: (id: string, input: { name: string; email: string }) =>
+    apiRequest<StaffUser>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  setStaffPassword: (id: string, password: string) =>
+    apiRequest<void>(`/users/${id}/password`, { method: 'PUT', body: JSON.stringify({ password }) }),
+  removeStaff: (id: string) => apiRequest<void>(`/users/${id}`, { method: 'DELETE' }),
   testSkipcash: (input: SkipCashCredentialsInput) =>
     apiRequest<SkipCashTestResult>('/settings/skipcash/test', {
       method: 'POST',

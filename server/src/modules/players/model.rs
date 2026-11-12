@@ -11,6 +11,8 @@ pub struct Player {
     pub playername: String,
     pub phone: Option<String>,
     pub email: Option<String>,
+    /// The player entered the code emailed to this address.
+    pub email_verified: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     /// Profile picture (`/api/avatars/{id}?v=…`, prefix the API origin), if they uploaded one.
