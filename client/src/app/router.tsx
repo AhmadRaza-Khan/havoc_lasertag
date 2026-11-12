@@ -14,11 +14,6 @@ import { SettingsPage } from '@/features/settings'
 export function AppRoutes() {
   return (
     <Routes>
-      {/* Public: store listings and the app link here (no login) */}
-      <Route path="/privacy" element={<PrivacyPage />} />
-      <Route path="/terms" element={<TermsPage />} />
-      <Route path="/delete-account" element={<DeleteAccountPage />} />
-
       <Route element={<GuestRoute />}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -44,7 +39,10 @@ export function AppRoutes() {
   )
 }
 
-/** The players' policy site: only the public pages; anything else goes to the privacy policy. */
+/**
+ * The players' policy site (policy.havoc-tlt.com): only the public pages; anything else goes to
+ * the privacy policy. The staff site doesn't have these pages.
+ */
 export function PublicRoutes() {
   return (
     <Routes>

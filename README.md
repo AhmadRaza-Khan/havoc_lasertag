@@ -351,7 +351,7 @@ in messages are masked automatically (`shared/profanity.rs`).
 | GET | `/api/chats/reports?status=open\|resolved` | admin: reports, newest first |
 | POST | `/api/chats/reports/{id}/resolve` | admin: mark handled |
 
-Public pages (no login): `/privacy`, `/terms`, `/delete-account` at https://policy.havoc-tlt.com (the same web build: on that host it shows only these pages; the app links there). Store listing
+Public pages (no login): `/privacy`, `/terms`, `/delete-account` at https://policy.havoc-tlt.com (the same web build: on that host it shows only these pages, and the staff site doesn't have them; the app links there). Locally, run the web app with `VITE_PUBLIC_SITE_HOST=localhost` to see them. Store listing
 answers: `STORE_SUBMISSION.md`.
 
 ### Chats as Havoc Admin (admin panel)
