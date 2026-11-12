@@ -3,7 +3,9 @@ import type { FormEvent } from 'react'
 import { CircleCheck, KeyRound, Pencil, Trash2, UserPlus } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
+import { PasswordChecklist } from '@/components/ui/PasswordChecklist'
 import { useAuth } from '@/features/auth'
+import { passwordOk } from '@/lib/password'
 import {
   useChangeMyPassword,
   useCreateStaff,
@@ -128,7 +130,6 @@ function MyAccount() {
               type="password"
               autoComplete="new-password"
               required
-              minLength={8}
               value={next}
               onChange={(e) => setNext(e.target.value)}
             />
@@ -139,13 +140,13 @@ function MyAccount() {
               type="password"
               autoComplete="new-password"
               required
-              minLength={8}
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
               aria-invalid={mismatch}
             />
           </label>
         </div>
+        <PasswordChecklist password={next} />
         {mismatch && <p className="error">The passwords don’t match.</p>}
         {change.error && <p className="error">{change.error.message}</p>}
         <div className="form-actions settings-actions">
@@ -155,7 +156,7 @@ function MyAccount() {
               Password changed. Your other sessions were signed out.
             </span>
           )}
-          <button type="submit" className="btn btn-secondary" disabled={change.isPending || mismatch}>
+          <button type="submit" className="btn btn-secondary" disabled={change.isPending || mismatch || !passwordOk(next)}>
             <KeyRound size={16} aria-hidden="true" />
             {change.isPending ? 'Changing…' : 'Change password'}
           </button>
@@ -347,7 +348,7 @@ function AddStaffDialog({ onClose, onDone }: { onClose: () => void; onDone: (u: 
           <button type="button" className="btn btn-secondary" onClick={onClose} disabled={create.isPending}>
             Cancel
           </button>
-          <button type="submit" form="add-staff" className="btn btn-primary" disabled={create.isPending}>
+          <button type="submit" form="add-staff" className="btn btn-primary" disabled={create.isPending || !passwordOk(values.password)}>
             {create.isPending ? 'Adding…' : 'Add staff'}
           </button>
         </>
@@ -376,9 +377,10 @@ function AddStaffDialog({ onClose, onDone }: { onClose: () => void; onDone: (u: 
           <input type="email" value={values.email} onChange={set('email')} />
         </label>
         <label>
-          Password <span className="muted">(at least 8 characters; give it to them)</span>
-          <input type="text" required minLength={8} autoComplete="off" value={values.password} onChange={set('password')} />
+          Password <span className="muted">(give it to them)</span>
+          <input type="text" required autoComplete="off" value={values.password} onChange={set('password')} />
         </label>
+        <PasswordChecklist password={values.password} />
         {create.error && <p className="error">{create.error.message}</p>}
       </form>
     </Modal>
@@ -449,7 +451,7 @@ function SetPasswordDialog({ user, onClose, onDone }: { user: StaffUser; onClose
           <button type="button" className="btn btn-secondary" onClick={onClose} disabled={setPw.isPending}>
             Cancel
           </button>
-          <button type="submit" form="set-password" className="btn btn-primary" disabled={setPw.isPending}>
+          <button type="submit" form="set-password" className="btn btn-primary" disabled={setPw.isPending || !passwordOk(password)}>
             {setPw.isPending ? 'Saving…' : 'Set password'}
           </button>
         </>
@@ -467,9 +469,10 @@ function SetPasswordDialog({ user, onClose, onDone }: { user: StaffUser; onClose
           Their current sessions will be signed out. Give them the new password; they can change it in Settings.
         </p>
         <label>
-          New password <span className="muted">(at least 8 characters)</span>
-          <input type="text" required minLength={8} autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} />
+          New password
+          <input type="text" required autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} />
         </label>
+        <PasswordChecklist password={password} />
         {setPw.error && <p className="error">{setPw.error.message}</p>}
       </form>
     </Modal>

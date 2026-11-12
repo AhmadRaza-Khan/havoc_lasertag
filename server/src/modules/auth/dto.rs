@@ -56,7 +56,7 @@ mod tests {
 
     #[test]
     fn normalizes_username() {
-        let r = req("  Admin_1 ", " Admin ", "password123")
+        let r = req("  Admin_1 ", " Admin ", "Blue-Falcon42")
             .validated()
             .unwrap();
         assert_eq!(r.username, "admin_1");
@@ -66,6 +66,6 @@ mod tests {
     #[test]
     fn rejects_short_password_and_empty_name() {
         assert!(req("admin", "Name", "short").validated().is_err());
-        assert!(req("admin", "   ", "password123").validated().is_err());
+        assert!(req("admin", "   ", "Blue-Falcon42").validated().is_err());
     }
 }

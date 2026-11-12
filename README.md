@@ -94,6 +94,12 @@ add its route inside the `AdminLayout` group in `app/router.tsx`, and add a side
 
 ## Security model
 
+- **Password rules** (players and staff, whenever a password is set or changed): at least 8
+  characters with an uppercase letter, a number and a special character, and not a common
+  password (`Password1!`, `P@ssw0rd`, `Havoc2026!`: a list of common words, with decoration
+  and look-alike characters stripped). Enforced by the server (`shared/validation.rs`); the app
+  and the panel show the same rules as a live checklist (`lib/password.ts` in each). Existing
+  passwords still sign in.
 - **Two kinds of token, never interchangeable** (`kind` claim): admin tokens only work on admin
   routes, player tokens only on `/api/player/*` and the chat socket (403 otherwise).
 - **Every request re-checks the account**: deleted accounts and tokens issued before a password

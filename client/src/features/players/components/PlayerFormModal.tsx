@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Modal } from '@/components/ui/Modal'
+import { PasswordChecklist } from '@/components/ui/PasswordChecklist'
+import { passwordOk } from '@/lib/password'
 import { useCreatePlayer, useUpdatePlayer } from '../hooks'
 import type { Player, PlayerInput } from '../types'
 
@@ -36,6 +38,8 @@ function PlayerForm({ player, onDone }: { player: Player | null; onDone: () => v
   const update = useUpdatePlayer()
   const mutation = player ? update : create
   const isEdit = player !== null
+  // Editing: a blank password keeps the current one.
+  const passwordReady = isEdit && !values.password ? true : passwordOk(values.password)
 
   function set<K extends keyof PlayerInput>(key: K, value: PlayerInput[K]) {
     setValues((v) => ({ ...v, [key]: value }))
@@ -97,12 +101,12 @@ function PlayerForm({ player, onDone }: { player: Player | null; onDone: () => v
           type="password"
           autoComplete="new-password"
           required={!isEdit}
-          minLength={8}
-          placeholder={isEdit ? 'Leave blank to keep current password' : 'At least 8 characters'}
+          placeholder={isEdit ? 'Leave blank to keep current password' : undefined}
           value={values.password}
           onChange={(e) => set('password', e.target.value)}
         />
       </label>
+      {(!isEdit || values.password) && <PasswordChecklist password={values.password} />}
 
       {mutation.error && <p className="error">{mutation.error.message}</p>}
 
@@ -110,7 +114,7 @@ function PlayerForm({ player, onDone }: { player: Player | null; onDone: () => v
         <button type="button" className="btn btn-secondary" onClick={onDone} disabled={mutation.isPending}>
           Cancel
         </button>
-        <button type="submit" className="btn btn-primary" disabled={mutation.isPending}>
+        <button type="submit" className="btn btn-primary" disabled={mutation.isPending || !passwordReady}>
           {mutation.isPending ? 'Saving…' : isEdit ? 'Save changes' : 'Add player'}
         </button>
       </div>

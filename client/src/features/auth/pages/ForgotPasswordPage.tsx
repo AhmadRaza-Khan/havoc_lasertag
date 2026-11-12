@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
+import { PasswordChecklist } from '@/components/ui/PasswordChecklist'
+import { passwordOk } from '@/lib/password'
 import { authApi } from '../api'
 
 /**
@@ -107,24 +109,23 @@ export default function ForgotPasswordPage() {
               type="password"
               autoComplete="new-password"
               required
-              minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
           </label>
+          <PasswordChecklist password={password} />
           <label>
             Confirm new password
             <input
               type="password"
               autoComplete="new-password"
               required
-              minLength={8}
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
             />
           </label>
           {error && <p className="error">{error}</p>}
-          <button type="submit" className="btn btn-primary" disabled={busy || code.length !== 6}>
+          <button type="submit" className="btn btn-primary" disabled={busy || code.length !== 6 || !passwordOk(password)}>
             {busy ? 'Saving…' : 'Change password'}
           </button>
           <button type="button" className="link-button login-forgot" disabled={busy} onClick={() => void sendCode()}>

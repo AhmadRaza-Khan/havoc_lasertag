@@ -659,3 +659,28 @@ select:focus {
 .not-found p {
   margin: 0 0 8px;
 }
+
+/* New-password requirements, ticked off while typing (PasswordChecklist). */
+.password-checklist {
+  list-style: none;
+  margin: -0.25rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.password-checklist li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.password-checklist li.is-ok {
+  color: var(--success);
+}
+
+.password-checklist li.is-missing {
+  color: var(--danger);
+}

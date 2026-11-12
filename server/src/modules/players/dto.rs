@@ -102,7 +102,7 @@ mod tests {
 
     #[test]
     fn normalizes_fields() {
-        let p = input(Some("password123")).validate(true).unwrap();
+        let p = input(Some("Blue-Falcon42")).validate(true).unwrap();
         assert_eq!(p.full_name, "Jane Doe");
         assert_eq!(p.playername, "jane_d");
         assert_eq!(p.phone, None);
